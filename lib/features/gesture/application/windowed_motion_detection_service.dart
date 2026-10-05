@@ -9,7 +9,7 @@ class WindowedMotionDetectionService implements MotionDetectionService {
     : _smoother =
           smoother ?? ExponentialPositionSmoother(config.smoothingAlpha);
 
-  final MotionConfig config;
+  final MotionDetectionConfig config;
   final PositionSmoother _smoother;
   final List<({Duration time, double y})> _samples = [];
   Duration? _lastTime;
@@ -18,6 +18,10 @@ class WindowedMotionDetectionService implements MotionDetectionService {
   HandAction _candidate = HandAction.idle;
   int _confirmationCount = 0;
   bool _hadHand = false;
+  double? _lastRawY;
+  double? _neutralY;
+  double? _stableAnchor;
+  Duration? _stableSince;
 
   @override
   HandMotion process(HandTrackingResult result) {
@@ -39,11 +43,48 @@ class WindowedMotionDetectionService implements MotionDetectionService {
       return HandMotion(action: action);
     }
     final first = !_hadHand;
+    final previousY = _lastRawY;
+    if (previousY != null &&
+        (pose.palmY - previousY).abs() > config.maximumPositionJump) {
+      // A discontinuity can mean a replacement hand; never turn it into a fling.
+      reset();
+      return process(result);
+    }
     _hadHand = true;
-    _samples.add((time: result.timestamp, y: _smoother.add(pose.palmY)));
+    _lastRawY = pose.palmY;
+    if (_neutralY == null) {
+      if (_stableAnchor == null ||
+          (pose.palmY - _stableAnchor!).abs() > config.calibrationRadius) {
+        _stableAnchor = pose.palmY;
+        _stableSince = result.timestamp;
+      } else if (result.timestamp - _stableSince! >=
+          config.calibrationDuration) {
+        _neutralY = _samples.isEmpty
+            ? pose.palmY
+            : _samples.fold<double>(0, (sum, sample) => sum + sample.y) /
+                  _samples.length;
+      }
+    }
+    final rawVelocity = previousY == null || lastTime == null
+        ? null
+        : (pose.palmY - previousY) /
+              ((result.timestamp - lastTime).inMicroseconds / 1000000);
+    if (rawVelocity != null && rawVelocity.abs() <= config.stationaryVelocity) {
+      // Flush regression/EMA momentum when the hand stops; displaced hands stay idle.
+      _samples.clear();
+      _smoother.reset();
+      _direction = _candidate = HandAction.idle;
+      _confirmationCount = 0;
+    }
+    final y = _smoother.add(pose.palmY);
+    _samples.add((time: result.timestamp, y: y));
     if (_samples.length > config.windowSize) _samples.removeAt(0);
     if (_samples.length < config.minimumFrames) {
-      return HandMotion(action: first ? HandAction.start : HandAction.idle);
+      return HandMotion(
+        action: first ? HandAction.start : HandAction.idle,
+        smoothedY: y,
+        neutralY: _neutralY,
+      );
     }
 
     final displacement = _samples.last.y - _samples.first.y;
@@ -91,6 +132,8 @@ class WindowedMotionDetectionService implements MotionDetectionService {
       action: _direction,
       verticalDisplacement: displacement,
       verticalVelocity: velocity,
+      smoothedY: y,
+      neutralY: _neutralY,
     );
   }
 
@@ -102,5 +145,7 @@ class WindowedMotionDetectionService implements MotionDetectionService {
     _direction = _candidate = HandAction.idle;
     _confirmationCount = 0;
     _hadHand = false;
+    _lastRawY = _neutralY = _stableAnchor = null;
+    _stableSince = null;
   }
 }

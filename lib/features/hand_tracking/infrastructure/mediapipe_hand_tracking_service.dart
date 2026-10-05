@@ -17,6 +17,7 @@ class MediaPipeHandTrackingService implements HandTrackingService {
     'detectionConfidence': config.detectionConfidence,
     'presenceConfidence': config.presenceConfidence,
     'trackingConfidence': config.trackingConfidence,
+    'maximumInferenceDimension': config.maximumInferenceDimension,
   });
 
   @override
@@ -41,10 +42,14 @@ class MediaPipeHandTrackingService implements HandTrackingService {
     final pose = points.isEmpty
         ? null
         : HandPose(
-            landmarks: points
-                .map((point) {
-                  final xyz = point as List<Object?>;
+            landmarks: points.indexed
+                .map((entry) {
+                  final xyz = entry.$2 as List<Object?>;
+                  if (xyz.length != 3) {
+                    throw const FormatException('Expected xyz coordinates.');
+                  }
                   return HandLandmark(
+                    index: entry.$1,
                     x: (xyz[0] as num).toDouble(),
                     y: (xyz[1] as num).toDouble(),
                     z: (xyz[2] as num).toDouble(),

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:camera/camera.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/config.dart';
@@ -40,6 +41,8 @@ class TrackingController {
   int _generation = 0;
   int _completed = 0;
   double _fps = 0;
+  Duration? _lastHand;
+  Timer? _resultWatchdog;
 
   bool get _shouldRun => _wanted && _foreground && !_closed;
 
@@ -101,9 +104,11 @@ class TrackingController {
       _completed = 0;
       _fps = 0;
       _lastAccepted = null;
+      _lastHand = null;
       _emit(
         const TrackingState(
           running: true,
+          phase: TrackingPhase.searching,
           motion: HandMotion(action: HandAction.start),
         ),
       );
@@ -135,10 +140,32 @@ class TrackingController {
 
   Future<void> _process(CameraFrame frame, int generation) async {
     try {
+      final latency = Stopwatch()..start();
       final result = await tracker.track(frame);
       if (!_shouldRun || generation != _generation) return;
       final motion = motionDetector.process(result);
       scroll.handle(motion);
+      _resultWatchdog?.cancel();
+      _resultWatchdog = Timer(config.lostAfter, () {
+        if (!_shouldRun || generation != _generation) return;
+        scroll.stop();
+        motionDetector.reset();
+        _emit(
+          TrackingState(
+            running: true,
+            phase: _lastHand == null
+                ? TrackingPhase.searching
+                : TrackingPhase.lost,
+          ),
+        );
+      });
+      if (result.handDetected) _lastHand = result.timestamp;
+      final phase = result.handDetected
+          ? TrackingPhase.tracking
+          : _lastHand != null &&
+                result.timestamp - _lastHand! < config.lostAfter
+          ? TrackingPhase.lost
+          : TrackingPhase.searching;
       _completed++;
       if (_fpsClock.elapsedMilliseconds >= 1000) {
         _fps = _completed * 1000000 / _fpsClock.elapsedMicroseconds;
@@ -151,6 +178,8 @@ class TrackingController {
           result: result,
           motion: motion,
           inferenceFps: _fps,
+          phase: phase,
+          inferenceMilliseconds: latency.elapsedMicroseconds / 1000,
         ),
       );
     } catch (error) {
@@ -169,6 +198,7 @@ class TrackingController {
 
   Future<void> _release() async {
     _generation++;
+    _resultWatchdog?.cancel();
     scroll.stop();
     // Each owner gets a cleanup attempt even if another owner fails.
     try {
@@ -208,6 +238,12 @@ class TrackingController {
   String _message(Object error) {
     if (error is CameraException && error.code.startsWith('CameraAccess')) {
       return 'Camera permission denied or restricted. Enable Camera in Android app settings, then retry.';
+    }
+    if (error is CameraException) {
+      return 'Camera unavailable: ${error.description ?? error.code}. Retry after closing other camera apps.';
+    }
+    if (error is PlatformException) {
+      return 'Hand tracking unavailable: ${error.message ?? error.code}. Stop and retry; check the bundled model and device support.';
     }
     return 'Tracking failed: $error';
   }

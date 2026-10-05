@@ -27,6 +27,7 @@ class FrontCameraService implements CameraService {
     final controller = CameraController(
       front.first,
       ResolutionPreset.medium,
+      fps: 30,
       enableAudio: false,
       imageFormatGroup: ImageFormatGroup.yuv420,
     );

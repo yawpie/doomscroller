@@ -52,11 +52,14 @@ class FakeTracker implements HandTrackingService {
   bool disposed = true;
   @override
   Future<void> initialize() async => disposed = false;
+  HandPose? pose;
   @override
   Future<HandTrackingResult> track(CameraFrame frame) {
     calls++;
     return pending?.future ??
-        Future.value(HandTrackingResult(timestamp: frame.timestamp));
+        Future.value(
+          HandTrackingResult(timestamp: frame.timestamp, pose: pose),
+        );
   }
 
   @override
@@ -90,7 +93,9 @@ void main() {
       camera: camera,
       tracker: tracker,
       scroll: scroll,
-      motionDetector: WindowedMotionDetectionService(const MotionConfig()),
+      motionDetector: WindowedMotionDetectionService(
+        const MotionDetectionConfig(),
+      ),
       config: const TrackingConfig(),
       onState: states.add,
     );
@@ -180,4 +185,73 @@ void main() {
     expect(states.last.error, contains('Model failed'));
     expect(camera.disposed && tracker.disposed, isTrue);
   });
+
+  test(
+    'missing-result watchdog clears stale hand without ending the camera session',
+    () async {
+      await controller.dispose();
+      controller = TrackingController(
+        camera: camera,
+        tracker: tracker,
+        scroll: scroll,
+        motionDetector: WindowedMotionDetectionService(
+          const MotionDetectionConfig(),
+        ),
+        config: const TrackingConfig(lostAfter: Duration(milliseconds: 5)),
+        onState: states.add,
+      );
+      tracker.pose = HandPose(
+        landmarks: List.generate(
+          21,
+          (i) => HandLandmark(index: i, x: 0.5, y: 0.5, z: 0),
+        ),
+      );
+      await controller.start();
+      camera.emit(0);
+      await flush();
+      expect(states.last.phase, TrackingPhase.tracking);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(states.last.phase, TrackingPhase.lost);
+      expect(states.last.result, isNull);
+      expect(states.last.running, isTrue);
+      expect(states.last.motion.verticalVelocity, 0);
+    },
+  );
+
+  test(
+    'explicit searching, tracking, lost, searching and reacquisition states',
+    () async {
+      await controller.start();
+      expect(states.last.phase, TrackingPhase.searching);
+      tracker.pose = HandPose(
+        landmarks: List.generate(
+          21,
+          (i) => HandLandmark(index: i, x: 0.5, y: 0.5, z: 0),
+        ),
+      );
+      camera.emit(0);
+      await flush();
+      expect(states.last.phase, TrackingPhase.tracking);
+      tracker.pose = null;
+      camera.emit(100);
+      await flush();
+      expect(states.last.phase, TrackingPhase.lost);
+      expect(scroll.motions.last.action, HandAction.stop);
+      camera.emit(900);
+      await flush();
+      expect(states.last.phase, TrackingPhase.searching);
+      tracker.pose = HandPose(
+        landmarks: List.generate(
+          21,
+          (i) => HandLandmark(index: i, x: 0.5, y: 0.2, z: 0),
+        ),
+      );
+      camera.emit(1000);
+      await flush();
+      expect(states.last.phase, TrackingPhase.tracking);
+      expect(scroll.motions.last.action, HandAction.start);
+      await controller.stop();
+      expect(states.last.phase, TrackingPhase.disabled);
+    },
+  );
 }

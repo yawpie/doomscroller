@@ -36,6 +36,20 @@ void main() {
         reason:
             'Camera/MediaPipe must return a real result, including an empty-hand result.',
       );
+      // Lifecycle restart must recreate both native owners without freezing.
+      await tester.runAsync(() async {
+        await coordinator.setForeground(false);
+        expect(container.read(trackingProvider).running, isFalse);
+        await coordinator.setForeground(true);
+        final timeout = Stopwatch()..start();
+        while (container.read(trackingProvider).result == null &&
+            container.read(trackingProvider).error == null &&
+            timeout.elapsed < const Duration(seconds: 20)) {
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        }
+      });
+      expect(container.read(trackingProvider).error, isNull);
+      expect(container.read(trackingProvider).result, isNotNull);
       await tester.runAsync(coordinator.stop);
       await tester.pumpAndSettle();
       expect(container.read(trackingProvider).running, isFalse);

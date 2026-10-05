@@ -9,13 +9,20 @@ HandTrackingResult sample(int ms, double? y) => HandTrackingResult(
   pose: y == null
       ? null
       : HandPose(
-          landmarks: List.generate(21, (_) => HandLandmark(x: 0.5, y: y, z: 0)),
+          landmarks: List.generate(
+            21,
+            (i) => HandLandmark(index: i, x: 0.5, y: y, z: 0),
+          ),
         ),
 );
 
 void main() {
   late WindowedMotionDetectionService detector;
-  setUp(() => detector = WindowedMotionDetectionService(const MotionConfig()));
+  setUp(
+    () => detector = WindowedMotionDetectionService(
+      const MotionDetectionConfig(),
+    ),
+  );
 
   List<HandMotion> sequence(double speed, {int count = 12}) => List.generate(
     count,
@@ -73,7 +80,85 @@ void main() {
       (i) => detector.process(sample(1200 + i * 100, 0.72)),
     );
     expect(motions.last.action, HandAction.idle);
+    expect(motions.first.action, HandAction.idle);
+    expect(motions.first.verticalVelocity, 0);
   });
+
+  test('large landmark jump restarts without a fling', () {
+    sequence(0.2);
+    final jump = detector.process(sample(1200, 0.1));
+    expect(jump.action, HandAction.start);
+    expect(jump.verticalVelocity, 0);
+    expect(jump.calibrated, isFalse);
+    expect(detector.process(sample(1300, 0.1)).action, HandAction.idle);
+  });
+
+  test('stable jitter calibrates a neutral position; loss clears it', () {
+    HandMotion motion = const HandMotion(action: HandAction.idle);
+    for (var i = 0; i < 12; i++) {
+      motion = detector.process(
+        sample(i * 100, 0.5 + (i.isEven ? 0.003 : -0.003)),
+      );
+    }
+    expect(motion.calibrated, isTrue);
+    expect(motion.neutralY, closeTo(0.5, 0.004));
+    expect(detector.process(sample(1200, null)).calibrated, isFalse);
+  });
+
+  test('different regular frame intervals preserve velocity and direction', () {
+    for (final interval in [67, 100, 200]) {
+      detector.reset();
+      HandMotion motion = const HandMotion(action: HandAction.idle);
+      for (var i = 0; i < 15; i++) {
+        motion = detector.process(
+          sample(i * interval, 0.2 + 0.2 * i * interval / 1000),
+        );
+      }
+      expect(motion.action, HandAction.moveDown);
+      expect(motion.verticalVelocity, closeTo(0.2, 0.005));
+    }
+  });
+
+  test('velocity dead-zone rejects below threshold and admits above', () {
+    for (final speed in [0.0249, 0.0251]) {
+      final service = WindowedMotionDetectionService(
+        const MotionDetectionConfig(
+          smoothingAlpha: 1,
+          movementThreshold: 0,
+          deadZone: 0,
+          stationaryVelocity: 0,
+          confirmationFrames: 1,
+        ),
+      );
+      final motions = List.generate(
+        12,
+        (i) => service.process(sample(i * 100, 0.3 + speed * i * 0.1)),
+      );
+      expect(
+        motions.last.action,
+        speed < 0.025 ? HandAction.idle : HandAction.moveDown,
+      );
+    }
+  });
+
+  test(
+    'palm position ignores fingertip noise and exposes both normalized axes',
+    () {
+      final pose = HandPose(
+        landmarks: List.generate(
+          21,
+          (i) => HandLandmark(
+            index: i,
+            x: [0, 5, 9, 13, 17].contains(i) ? 0.4 : 0.9,
+            y: [0, 5, 9, 13, 17].contains(i) ? 0.6 : 0.1,
+            z: 0,
+          ),
+        ),
+      );
+      expect(pose.palmCenter.normalizedX, closeTo(0.4, 1e-6));
+      expect(pose.palmCenter.normalizedY, closeTo(0.6, 1e-6));
+    },
+  );
 
   test('long frame gap resets movement history', () {
     sequence(0.2);
@@ -114,7 +199,7 @@ void main() {
       () => HandPose(
         landmarks: List.generate(
           21,
-          (_) => const HandLandmark(x: double.nan, y: 0.5, z: 0),
+          (i) => HandLandmark(index: i, x: double.nan, y: 0.5, z: 0),
         ),
       ),
       throwsArgumentError,

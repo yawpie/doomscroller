@@ -1,6 +1,8 @@
 import '../../gesture/domain/hand_motion.dart';
 import '../../hand_tracking/domain/hand_models.dart';
 
+enum TrackingPhase { disabled, searching, tracking, lost }
+
 class TrackingState {
   const TrackingState({
     this.running = false,
@@ -9,6 +11,8 @@ class TrackingState {
     this.motion = const HandMotion(action: HandAction.idle),
     this.inferenceFps = 0,
     this.error,
+    this.phase = TrackingPhase.disabled,
+    this.inferenceMilliseconds = 0,
   });
 
   final bool running;
@@ -17,4 +21,6 @@ class TrackingState {
   final HandMotion motion;
   final double inferenceFps;
   final String? error;
+  final TrackingPhase phase;
+  final double inferenceMilliseconds;
 }

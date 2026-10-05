@@ -37,4 +37,13 @@ class YuvFrameTest {
             plane(16, row = 2), plane(128, row = 1), plane(128, row = 1),
         ))
     }
+
+    @Test fun sampledConversionUsesSourceCoordinatesIncludingOddDimensions() {
+        val planes = listOf(
+            plane(16, 235, 16, 235, 16, 235, row = 3),
+            plane(128, 128, row = 2), plane(128, 128, row = 2),
+        )
+        assertArrayEquals(intArrayOf(0xff000000.toInt(), 0xff000000.toInt()),
+            YuvFrame.toArgb(3, 2, planes, sample = 2))
+    }
 }

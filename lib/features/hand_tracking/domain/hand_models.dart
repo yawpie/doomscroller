@@ -1,6 +1,12 @@
 class HandLandmark {
-  const HandLandmark({required this.x, required this.y, required this.z});
+  const HandLandmark({
+    required this.index,
+    required this.x,
+    required this.y,
+    required this.z,
+  });
 
+  final int index;
   final double x;
   final double y;
   // Relative depth; unlike x/y this is not restricted to [0, 1].
@@ -14,17 +20,20 @@ class HandPose {
     this.handednessConfidence,
   }) : landmarks = List.unmodifiable(landmarks) {
     if (landmarks.length != 21 ||
-        landmarks.any(
-          (p) =>
-              !p.x.isFinite ||
-              !p.y.isFinite ||
-              !p.z.isFinite ||
-              p.x < 0 ||
-              p.x > 1 ||
-              p.y < 0 ||
-              p.y > 1,
+        landmarks.indexed.any(
+          (entry) =>
+              entry.$2.index != entry.$1 ||
+              !entry.$2.x.isFinite ||
+              !entry.$2.y.isFinite ||
+              !entry.$2.z.isFinite ||
+              entry.$2.x < 0 ||
+              entry.$2.x > 1 ||
+              entry.$2.y < 0 ||
+              entry.$2.y > 1,
         )) {
-      throw ArgumentError('A pose requires 21 finite normalized landmarks.');
+      throw ArgumentError(
+        'A pose requires 21 ordered indexed finite normalized landmarks.',
+      );
     }
     final confidence = handednessConfidence;
     if (confidence != null &&
@@ -40,6 +49,10 @@ class HandPose {
 
   double get palmY =>
       [0, 5, 9, 13, 17].fold<double>(0, (sum, i) => sum + landmarks[i].y) / 5;
+  double get palmX =>
+      [0, 5, 9, 13, 17].fold<double>(0, (sum, i) => sum + landmarks[i].x) / 5;
+  ({double normalizedX, double normalizedY}) get palmCenter =>
+      (normalizedX: palmX, normalizedY: palmY);
 }
 
 class HandTrackingResult {

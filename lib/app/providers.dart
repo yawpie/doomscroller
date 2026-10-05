@@ -13,7 +13,7 @@ import '../features/auto_scroll/domain/scroll_service.dart';
 import '../features/auto_scroll/infrastructure/flutter_scroll_service.dart';
 
 final trackingConfigProvider = Provider((ref) => const TrackingConfig());
-final motionConfigProvider = Provider((ref) => const MotionConfig());
+final motionConfigProvider = Provider((ref) => const MotionDetectionConfig());
 final scrollConfigProvider = Provider((ref) => const ScrollConfig());
 
 final cameraServiceProvider = Provider<CameraService>(

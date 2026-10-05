@@ -40,7 +40,9 @@ void main() {
     await tester.pumpWidget(const ProviderScope(child: AutoScrollApp()));
     expect(find.text('Start tracking'), findsOneWidget);
     expect(find.text('No hand detected'), findsOneWidget);
-    expect(find.text('Action: idle'), findsOneWidget);
+    expect(find.text('Action: IDLE'), findsOneWidget);
+    expect(find.text('Tracking: DISABLED'), findsOneWidget);
+    expect(find.byType(Slider), findsOneWidget);
     expect(find.text('Reading item 1'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
@@ -85,4 +87,30 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     scroll.dispose();
   });
+
+  testWidgets(
+    'controls work without overflow on a narrow screen with large text',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(320, 640));
+      tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+      addTearDown(() async {
+        tester.platformDispatcher.clearTextScaleFactorTestValue();
+        await tester.binding.setSurfaceSize(null);
+      });
+      await tester.pumpWidget(const ProviderScope(child: AutoScrollApp()));
+      expect(tester.takeException(), isNull);
+      final slider = find.byType(Slider);
+      await tester.ensureVisible(slider);
+      await tester.drag(slider, const Offset(40, 0));
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      final switches = find.byType(Switch);
+      await tester.ensureVisible(switches.first);
+      await tester.tap(switches.first);
+      await tester.pump();
+      expect(tester.widget<Switch>(switches.first).value, isTrue);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    },
+  );
 }

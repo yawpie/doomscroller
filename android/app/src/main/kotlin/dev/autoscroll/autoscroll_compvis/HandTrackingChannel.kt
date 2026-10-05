@@ -16,6 +16,7 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import java.io.FileNotFoundException
 
 class HandTrackingChannel(
     private val context: Context,
@@ -28,6 +29,7 @@ class HandTrackingChannel(
     private var landmarker: HandLandmarker? = null
     private var lastTimestamp = -1L
     private var closed = false
+    private var maximumDimension = 320
 
     init {
         channel.setMethodCallHandler(this)
@@ -68,7 +70,8 @@ class HandTrackingChannel(
     private fun fail(result: MethodChannel.Result, error: Throwable) {
         Log.e("HandTracking", "Native tracking failed", error)
         val message = error.cause?.message ?: error.message ?: error.javaClass.simpleName
-        main.post { result.error("hand_tracking", message, null) }
+        val code = if (error is FileNotFoundException) "model_missing" else "hand_tracking"
+        main.post { result.error(code, message, null) }
     }
 
     private fun confidence(call: MethodCall, key: String): Float {
@@ -81,6 +84,9 @@ class HandTrackingChannel(
         release()
         val asset = FlutterInjector.instance().flutterLoader()
             .getLookupKeyForAsset("assets/models/hand_landmarker.task")
+        context.assets.open(asset).use { check(it.available() > 0) { "Hand Landmarker model is empty" } }
+        maximumDimension = requireNotNull(call.argument<Int>("maximumInferenceDimension"))
+        require(maximumDimension in 192..1920) { "Invalid inference size" }
         val options = HandLandmarker.HandLandmarkerOptions.builder()
             .setBaseOptions(BaseOptions.builder().setModelAssetPath(asset).build())
             .setRunningMode(RunningMode.VIDEO)
@@ -102,12 +108,17 @@ class HandTrackingChannel(
         val timestamp = requireNotNull(call.argument<Number>("timestampMs")).toLong()
         require(timestamp >= 0 && timestamp > lastTimestamp) { "Timestamps must increase" }
         val planes = requireNotNull(call.argument<List<Map<String, Any>>>("planes"))
-        val pixels = YuvFrame.toArgb(width, height, planes)
-        val raw = Bitmap.createBitmap(pixels, width, height, Bitmap.Config.ARGB_8888)
+        // ponytail: nearest-neighbor sampling saves conversion work; use filtered resizing
+        // if physical-device accuracy at small hand sizes warrants the extra cost.
+        val sample = (maxOf(width, height) + maximumDimension - 1) / maximumDimension
+        val inputWidth = (width + sample - 1) / sample
+        val inputHeight = (height + sample - 1) / sample
+        val pixels = YuvFrame.toArgb(width, height, planes, sample)
+        val raw = Bitmap.createBitmap(pixels, inputWidth, inputHeight, Bitmap.Config.ARGB_8888)
         var upright: Bitmap? = null
         try {
             val matrix = Matrix().apply { postRotate(rotation.toFloat()) }
-            upright = Bitmap.createBitmap(raw, 0, 0, width, height, matrix, false)
+            upright = Bitmap.createBitmap(raw, 0, 0, inputWidth, inputHeight, matrix, false)
             val image = BitmapImageBuilder(upright).build()
             try {
                 val detection = tracker.detectForVideo(image, timestamp)
@@ -125,6 +136,7 @@ class HandTrackingChannel(
                     "landmarks" to landmarks,
                     "handedness" to handedness?.categoryName(),
                     "handednessConfidence" to handedness?.score()?.toDouble(),
+                    "timestampMs" to timestamp,
                 )
             } finally {
                 image.close()
