@@ -1,5 +1,7 @@
 # Hand Scroll Lab
 
+The fully native Android application is in [native-android](native-android/README.md), with Kotlin recognition, CameraX/MediaPipe, Compose UI, a floating widget and accessibility swipes. See its [migration report](native-android/docs/migration.md) for verified tests and remaining physical-device acceptance checks. The Flutter implementation below is retained as the behavior baseline; the two apps install separately.
+
 An Android Flutter MVP that detects one hand with the front camera and scrolls its own reading list. MediaPipe inference and motion processing run entirely on-device. There is no backend, recording, frame upload, or runtime model download. Build-time dependency downloads require internet; installed inference works offline.
 
 ## Setup and run
