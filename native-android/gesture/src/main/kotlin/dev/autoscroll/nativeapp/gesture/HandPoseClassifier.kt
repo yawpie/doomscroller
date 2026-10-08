@@ -31,11 +31,28 @@ class HandPoseClassifier(val config: HandPoseDetectionConfig = HandPoseDetection
             pointing(points, activePose, exit = true)) return activePose
         if (pointing(points, RecognizedHandPose.POINTING_UP)) return RecognizedHandPose.POINTING_UP
         if (pointing(points, RecognizedHandPose.POINTING_DOWN)) return RecognizedHandPose.POINTING_DOWN
+        if (config.tapGesturesEnabled && validFinger(points, 1, palmLength)) {
+            if (activePose == RecognizedHandPose.THUMBS_UP && thumbsUp(points, exit = true)) return activePose
+            if (thumbsUp(points)) return RecognizedHandPose.THUMBS_UP
+            if (curled(points, 5, config.maximumCurledAngle)) return RecognizedHandPose.CLOSED_HAND
+        }
         for (mcp in 5..17 step 4) {
             if (!extended(points, mcp, config.minimumIndexAngle)) return RecognizedHandPose.UNKNOWN
         }
         return RecognizedHandPose.NEUTRAL
     }
+
+    private fun thumbsUp(points: List<HandLandmark>, exit: Boolean = false): Boolean {
+        if (!curled(points, 5, if (exit) config.exitCurledAngle else config.maximumCurledAngle) ||
+            !extended(points, 1, if (exit) config.exitIndexAngle else config.minimumIndexAngle)) return false
+        val dx = points[4].x - points[2].x
+        val dy = points[4].y - points[2].y
+        val length = sqrt(dx * dx + dy * dy)
+        return length > 1e-9 && dy / length <= -(if (exit) config.exitVerticalAlignment else config.minimumVerticalAlignment)
+    }
+
+    private fun curled(points: List<HandLandmark>, firstMcp: Int, threshold: Double): Boolean =
+        (firstMcp..17 step 4).all { mcp -> angle(points[mcp], points[mcp + 1], points[mcp + 2]) <= threshold }
 
     private fun pointing(points: List<HandLandmark>, pose: RecognizedHandPose, exit: Boolean = false): Boolean {
         if (!extended(points, 5, if (exit) config.exitIndexAngle else config.minimumIndexAngle)) return false

@@ -1,6 +1,6 @@
 # Hand Scroll Native
 
-Independent Kotlin Android application with Compose Material3, front CameraX/MediaPipe tracking, deterministic pose/flick/continuous recognition, foreground camera service, draggable controls and user-requested accessibility swipes. The original Flutter app is preserved at the repository root.
+Independent Kotlin Android application with Compose Material3, front CameraX/MediaPipe tracking, deterministic pose/flick/continuous recognition, foreground camera service, draggable controls and user-requested accessibility swipes and taps. The original Flutter app is preserved at the repository root.
 
 Two Gradle modules: `gesture` is Android-free JVM logic; `app` supplies the Android runtime. No Flutter SDK, Engine, Dart runtime, Flutter Activity or plugins are required by this project. Existing model/license are referenced from `../assets`.
 
@@ -12,7 +12,7 @@ Create ignored `native-android/local.properties` pointing to your SDK; use forwa
 
 ```powershell
 cd 'F:\Muhammad Rafi\Projects\autoscroll-compvis\native-android'
-$env:JAVA_HOME='C:\Program Files\Android\Android Studio\jbr'
+$env:JAVA_HOME='C:\Program Files\Java\jdk-21'
 .\gradlew.bat :gesture:test :app:testDebugUnitTest :app:assembleDebug :app:lintDebug
 .\gradlew.bat :app:connectedDebugAndroidTest
 adb install -r app\build\outputs\apk\debug\app-debug.apk
@@ -28,6 +28,7 @@ For cross-language tests run the original Flutter fixture test before native JUn
 - [Migration and validation report](docs/migration.md)
 - [Architecture and lifecycle](docs/architecture.md)
 - [Behavior parity](docs/gesture-parity.md)
+- [Native single-tap / double-tap gestures](docs/tap-gestures.md)
 - [Permissions](docs/permissions.md)
 - [Physical-device trials and benchmarks](docs/device-validation.md)
 - [Independent integration QA](docs/qa-review.md)

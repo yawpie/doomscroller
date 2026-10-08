@@ -1,6 +1,10 @@
 package dev.autoscroll.nativeapp.scrolling
 
-enum class ScrollAction { FORWARD, BACKWARD }
+enum class ScrollAction {
+    FORWARD, BACKWARD, SINGLE_TAP, DOUBLE_TAP;
+
+    val isTap: Boolean get() = this == SINGLE_TAP || this == DOUBLE_TAP
+}
 
 data class ScrollRequest(
     val action: ScrollAction,
@@ -10,6 +14,7 @@ data class ScrollRequest(
     init {
         require(distancePixels == null || distancePixels.isFinite() && distancePixels > 0)
         require(durationMs == null || durationMs in 1..60_000)
+        require(!action.isTap || (distancePixels == null && durationMs == null))
     }
 }
 

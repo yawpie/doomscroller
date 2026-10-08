@@ -29,6 +29,59 @@ class ScrollActionCoordinatorTest {
     private fun flick(direction: FlickDirection, timestamp: Long) = GestureDecision(
         motion = HandMotion(HandAction.IDLE), flick = FlickEvent(direction, timestamp, 0.2, 1.0, 200), suppressesContinuous = true)
 
+    @Test fun openHandAndThumbMapToTapsWithoutSwipeSettingsOrDirectionInversion() = runTest {
+        assertTrue(dev.autoscroll.nativeapp.settings.NativeSettings().pose.tapGesturesEnabled)
+        val executor = FakeExecutor()
+        var now = 1000L
+        val coordinator = ScrollActionCoordinator(executor, this, { now })
+        coordinator.configure(inverted = true)
+        coordinator.setSessionActive(true)
+        coordinator.process(pose(RecognizedHandPose.NEUTRAL, now)); runCurrent()
+        now += 100
+        coordinator.process(pose(RecognizedHandPose.THUMBS_UP, now)); runCurrent()
+        assertEquals(listOf(ScrollRequest(ScrollAction.SINGLE_TAP), ScrollRequest(ScrollAction.DOUBLE_TAP)), executor.requests)
+        coordinator.process(pose(RecognizedHandPose.CLOSED_HAND, now + 1)); runCurrent()
+        assertEquals(2, executor.requests.size)
+    }
+
+    @Test fun tapsHonorSessionFreshnessAndUnavailableService() = runTest {
+        val executor = FakeExecutor()
+        var now = 1000L
+        val coordinator = ScrollActionCoordinator(executor, this, { now })
+        coordinator.process(pose(RecognizedHandPose.NEUTRAL, now)); runCurrent()
+        coordinator.setSessionActive(true)
+        coordinator.process(pose(RecognizedHandPose.THUMBS_UP, 999)); runCurrent()
+        now += 500
+        coordinator.process(pose(RecognizedHandPose.NEUTRAL, 1100)); runCurrent()
+        coordinator.process(pose(RecognizedHandPose.NEUTRAL, 1501)); runCurrent()
+        executor.isReady = false
+        coordinator.process(pose(RecognizedHandPose.THUMBS_UP, now)); runCurrent()
+        assertTrue(executor.requests.isEmpty())
+        executor.isReady = true
+        now += 100
+        coordinator.process(pose(RecognizedHandPose.THUMBS_UP, now)); runCurrent()
+        coordinator.process(pose(RecognizedHandPose.THUMBS_UP, now)); runCurrent()
+        assertEquals(1, executor.requests.size)
+    }
+
+    @Test fun tapWhileBusyIsConsumedAndPauseCancelsScheduledTap() = runTest {
+        val executor = FakeExecutor().also { it.completion = CompletableDeferred() }
+        var now = 1000L
+        val coordinator = ScrollActionCoordinator(executor, this, { now })
+        coordinator.setSessionActive(true)
+        coordinator.process(pose(RecognizedHandPose.NEUTRAL, now)); runCurrent()
+        now += 100
+        coordinator.process(pose(RecognizedHandPose.THUMBS_UP, now)); runCurrent()
+        executor.completion!!.complete(ScrollExecutionResult.COMPLETED); runCurrent()
+        coordinator.process(pose(RecognizedHandPose.THUMBS_UP, now)); runCurrent()
+        assertEquals(1, executor.requests.size)
+        now += 100
+        coordinator.process(pose(RecognizedHandPose.THUMBS_UP, now))
+        coordinator.setSessionActive(false); runCurrent()
+        assertEquals(1, executor.requests.size)
+        assertEquals(0.0, coordinator.state.value.continuousPixelsPerSecond, 0.0)
+    }
+
     @Test fun downwardPoseAndFlickMapForwardAndInversionAppliesExactlyOnce() = runTest {
         val executor = FakeExecutor()
         var now = 1000L

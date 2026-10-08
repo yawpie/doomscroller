@@ -14,8 +14,10 @@ import android.os.SystemClock
 import android.util.DisplayMetrics
 import android.view.WindowInsets
 import android.view.WindowManager
+import android.view.ViewConfiguration
 import android.view.accessibility.AccessibilityEvent
 import dev.autoscroll.nativeapp.scrolling.ScrollExecutionResult
+import dev.autoscroll.nativeapp.scrolling.ScrollAction
 import dev.autoscroll.nativeapp.scrolling.ScrollRequest
 import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -68,13 +70,7 @@ class GestureAccessibilityService : AccessibilityService() {
         }
         val coordinates = avoidOverlay(swipeCoordinates(config, bounds, request), bounds, overlay)
             ?: return ScrollExecutionResult.TARGET_BLOCKED
-        val path = Path().apply {
-            moveTo(coordinates.x, coordinates.startY)
-            lineTo(coordinates.x, coordinates.endY)
-        }
-        val gesture = GestureDescription.Builder().addStroke(
-            GestureDescription.StrokeDescription(path, 0, coordinates.durationMs)
-        ).build()
+        val gesture = screenGesture(coordinates, request.action)
         return suspendCancellableCoroutine { continuation ->
             val dispatch = Dispatch(continuation)
             inFlight = dispatch
@@ -159,4 +155,18 @@ class GestureAccessibilityService : AccessibilityService() {
         internal var connectedService: GestureAccessibilityService? = null
             private set
     }
+}
+
+internal fun screenGesture(coordinates: SwipeCoordinates, action: ScrollAction): GestureDescription {
+    val path = Path().apply {
+        moveTo(coordinates.x, coordinates.startY)
+        if (!action.isTap) lineTo(coordinates.x, coordinates.endY)
+    }
+    val builder = GestureDescription.Builder().addStroke(
+        GestureDescription.StrokeDescription(path, 0, coordinates.durationMs))
+    if (action == ScrollAction.DOUBLE_TAP) {
+        val gap = minOf(100L, ViewConfiguration.getDoubleTapTimeout().toLong() / 2)
+        builder.addStroke(GestureDescription.StrokeDescription(path, coordinates.durationMs + gap, coordinates.durationMs))
+    }
+    return builder.build()
 }

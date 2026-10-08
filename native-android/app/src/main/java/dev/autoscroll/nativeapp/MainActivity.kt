@@ -41,7 +41,7 @@ class MainActivity : ComponentActivity() {
     private val app get() = application as GestureApplication
     private var permissionRevision by mutableIntStateOf(0)
     private var manualTest: Job? = null
-    private var manualResult by mutableStateOf("No swipe test yet")
+    private var manualResult by mutableStateOf("No screen action test yet")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -88,7 +88,7 @@ class MainActivity : ComponentActivity() {
                                     }) { Text("Allow floating widget") }
                                     Text("Floating widget: lets you pause, resume, stop, and move the controls over another app. It is optional.")
                                     Button(onClick = { disclosure = true }) { Text(if (accessibility) "Accessibility disclosure / settings" else "Set up accessibility") }
-                                    Text("Accessibility: performs only the vertical swipes you request. Screen contents and input text are not read. You enable it yourself in Android Settings.")
+                                    Text("Accessibility: performs the vertical swipes, single taps, and double taps you request. Screen contents and input text are not read. You enable it yourself in Android Settings.")
                                     if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
                                         OutlinedButton(onClick = { notificationRequest.launch(Manifest.permission.POST_NOTIFICATIONS) }) { Text("Allow session notifications") }
                                     Text("A session notification provides Pause and Stop. Android also shows camera use. Notification permission is recommended; denial does not prevent the foreground service.")
@@ -99,16 +99,22 @@ class MainActivity : ComponentActivity() {
                                             onClick = ::pauseSession) { Text("Pause") }
                                         OutlinedButton(enabled = state != GestureSessionState.Stopped, onClick = ::stopSession) { Text("Stop") }
                                     }
-                                    Text("Wait for Active, switch to your feed app, then point down to move forward or up to move backward. Open your hand before the next pointing gesture.")
+                                    Text("Wait for Active, then switch to your feed. In HYBRID or POSE mode: point down/up to navigate, show an open hand for one center tap (pause/play), or a thumbs-up for a double tap. Close your hand briefly before repeating a pose.")
                                     HorizontalDivider()
-                                    Text("Test an external swipe", style = MaterialTheme.typography.titleMedium)
-                                    Text("Open a feed app first, return here, then tap a test. Hand Scroll moves to the background and sends one swipe after one second. Camera stays off.")
+                                    Text("Test an external screen action", style = MaterialTheme.typography.titleMedium)
+                                    Text("Open a feed app first, return here, then tap a test. Hand Scroll moves to the background and sends the action after one second. Taps land at the center of the screen. Camera stays off.")
                                     val canTest = accessibility && consent && state == GestureSessionState.Stopped
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         OutlinedButton(enabled = canTest && manualTest?.isActive != true,
-                                            onClick = { testSwipe(ScrollAction.FORWARD) }) { Text("Swipe forward") }
+                                            onClick = { testAction(ScrollAction.FORWARD) }) { Text("Swipe forward") }
                                         OutlinedButton(enabled = canTest && manualTest?.isActive != true,
-                                            onClick = { testSwipe(ScrollAction.BACKWARD) }) { Text("Swipe backward") }
+                                            onClick = { testAction(ScrollAction.BACKWARD) }) { Text("Swipe backward") }
+                                    }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        OutlinedButton(enabled = canTest && manualTest?.isActive != true,
+                                            onClick = { testAction(ScrollAction.SINGLE_TAP) }) { Text("Single tap") }
+                                        OutlinedButton(enabled = canTest && manualTest?.isActive != true,
+                                            onClick = { testAction(ScrollAction.DOUBLE_TAP) }) { Text("Double tap") }
                                     }
                                     Text(manualResult)
                                 }
@@ -132,18 +138,19 @@ class MainActivity : ComponentActivity() {
                                     Text("Last action: ${diagnostics.lastAction}")
                                     Text("Frame callback to dispatch: ${diagnostics.gestureToActionMs?.let { "$it ms" } ?: "not measured"}")
                                     Text("Last rejection: ${diagnostics.rejectionReason ?: "None"}")
-                                    Text("CameraX's internal frame drops are not exposed. Swipe completion means Android completed dispatch; check the feed to confirm it moved.")
+                                    Text("CameraX's internal frame drops are not exposed. Action completion means Android completed dispatch; check the feed to confirm its response.")
                                 }
                                 else -> {
                                     Text("Getting started", style = MaterialTheme.typography.titleLarge)
                                     Text("1. Allow camera. Optionally allow the floating widget. Read the accessibility disclosure and enable Hand Scroll in Android Settings.")
-                                    Text("2. Test a forward and backward swipe with the camera stopped.")
+                                    Text("2. Test swipes and taps with the camera stopped.")
                                     Text("3. Start on the Dashboard and wait for Active. Switch to TikTok, Reels, Shorts, or another vertically scrolling app.")
-                                    Text("4. Point with the index finger; curl the other fingers. Hold briefly, then show an open hand to release. Flicks use fast vertical palm motion. Continuous mode starts after a stationary calibration hold.")
+                                    Text("4. In HYBRID or POSE mode, point with the index finger and curl the others to navigate. An open hand sends one center tap; a thumbs-up with all four other fingers curled sends a double tap. Hold briefly to confirm. Close your hand briefly before repeating; a held pose never repeats. Open hand also taps when releasing a pointing pose.")
+                                    Text("A single tap toggles pause/play only in feeds that support center tapping. Double-tap behavior depends on the target app. Flicks use fast vertical palm motion. CONTINUOUS and FLICK modes keep their existing movement controls without pose taps.")
                                     Text("Tap the status bubble to expand or collapse, and drag it to move it. Pause releases the camera. Resume opens this app, where you press Resume. Stop removes the widget and notification.")
                                     Text("Locking the screen pauses the session. After a process restart the session is stopped. Camera privacy controls, another camera app, battery restrictions, and device software may interrupt capture.")
-                                    Text("Keep the hand well lit and fully visible. Thresholds are experimental and need calibration on your phone. A dispatched swipe may be ignored by an app, and very small continuous swipes may not exceed its touch threshold.")
-                                    Text("Accessibility swipes can interrupt a finger touch already in progress. Stop or pause before sensitive interactions. System settings, permission screens, the launcher, and Hand Scroll itself are blocked swipe targets.")
+                                    Text("Keep the hand well lit and fully visible. Thresholds are experimental and need calibration on your phone. A dispatched action may be ignored by an app, and very small continuous swipes may not exceed its touch threshold.")
+                                    Text("Accessibility actions can interrupt a finger touch already in progress. Stop or pause before sensitive interactions. System settings, permission screens, the launcher, and Hand Scroll itself are blocked targets.")
                                     Text("All inference stays on this device. No accounts, ads, analytics, server, or video recording. Diagnostics here are in memory and clear on process restart.")
                                 }
                             }
@@ -152,8 +159,8 @@ class MainActivity : ComponentActivity() {
                 }
                 if (disclosure) AlertDialog(
                     onDismissRequest = { disclosure = false },
-                    title = { Text("Allow gesture controlled swipes") },
-                    text = { Text("Hand Scroll uses Android Accessibility to send vertical swipes requested by your hand gestures or test buttons in other apps. It receives only the current app's package name to block unsafe targets. It does not read screen content, text, or passwords. Swipes may interrupt an ongoing touch. You can pause, stop, or disable the service in Android Settings at any time.") },
+                    title = { Text("Allow gesture controlled screen actions") },
+                    text = { Text("Hand Scroll uses Android Accessibility to send vertical swipes, center single taps, and center double taps requested by your hand gestures or test buttons in other apps. It receives only the current app's package name to block unsafe targets. It does not read screen content, text, or passwords. Actions may interrupt an ongoing touch. You can pause, stop, or disable the service in Android Settings at any time.") },
                     confirmButton = { TextButton(onClick = {
                         app.settings.accessibilityConsent = true; consent = true; disclosure = false
                         stopBeforePermissionSettings()
@@ -195,7 +202,7 @@ class MainActivity : ComponentActivity() {
         if (app.session.machine.state == GestureSessionState.Active || app.session.machine.state == GestureSessionState.Starting) pauseSession()
         app.settings.update(settings)
     }
-    private fun testSwipe(action: ScrollAction) {
+    private fun testAction(action: ScrollAction) {
         if (!app.settings.accessibilityConsent || app.session.machine.state != GestureSessionState.Stopped) return
         manualTest?.cancel()
         manualTest = lifecycleScope.launch {
@@ -212,7 +219,7 @@ class MainActivity : ComponentActivity() {
                 coordinator.manual(action)
                 delay(settings.swipeDurationMs + 500)
                 val result = coordinator.state.value
-                manualResult = "${result.lastResult ?: "No result"}: ${result.rejectionReason ?: "check that the feed moved"}"
+                manualResult = "${result.lastResult ?: "No result"}: ${result.rejectionReason ?: "check the feed's response"}"
             } finally { coordinator.setSessionActive(false) }
         }
     }
@@ -246,11 +253,11 @@ private fun SettingsPanel(value: NativeSettings, enabled: Boolean, update: (Nati
     Text("Camera", style = MaterialTheme.typography.titleMedium)
     NumberSetting("Inference FPS", value.tracking.inferenceFps.toDouble(), 5.0..30.0, enabled, 24) { update(value.copy(tracking = value.tracking.copy(inferenceFps = it.toInt()))) }
     NumberSetting("Maximum image dimension", value.tracking.maximumInferenceDimension.toDouble(), 192.0..640.0, enabled, 13) { update(value.copy(tracking = value.tracking.copy(maximumInferenceDimension = it.toInt()))) }
-    Text("Pointing pose · open hand to release", style = MaterialTheme.typography.titleMedium)
+    Text("Pointing and tap poses · close hand to release", style = MaterialTheme.typography.titleMedium)
     NumberSetting("Confirm (ms)", value.pose.confirmationDurationMs.toDouble(), 100.0..500.0, enabled, 19) { update(value.copy(pose = value.pose.copy(confirmationDurationMs = it.toLong()))) }
-    NumberSetting("Neutral release (ms)", value.pose.releaseDurationMs.toDouble(), 100.0..500.0, enabled, 19) { update(value.copy(pose = value.pose.copy(releaseDurationMs = it.toLong()))) }
+    NumberSetting("Pose release (ms)", value.pose.releaseDurationMs.toDouble(), 100.0..500.0, enabled, 19) { update(value.copy(pose = value.pose.copy(releaseDurationMs = it.toLong()))) }
     NumberSetting("Pose cooldown (ms)", value.pose.cooldownMs.toDouble(), 200.0..1500.0, enabled, 25) { update(value.copy(pose = value.pose.copy(cooldownMs = it.toLong()))) }
-    NumberSetting("Index angle", value.pose.minimumIndexAngle, 150.0..175.0, enabled) { update(value.copy(pose = value.pose.copy(minimumIndexAngle = it))) }
+    NumberSetting("Extended index / thumb angle", value.pose.minimumIndexAngle, 150.0..175.0, enabled) { update(value.copy(pose = value.pose.copy(minimumIndexAngle = it))) }
     NumberSetting("Curled finger angle", value.pose.maximumCurledAngle, 80.0..125.0, enabled) { update(value.copy(pose = value.pose.copy(maximumCurledAngle = it))) }
     NumberSetting("Vertical alignment", value.pose.minimumVerticalAlignment, 0.70..1.0, enabled) { update(value.copy(pose = value.pose.copy(minimumVerticalAlignment = it))) }
     Text("Flick", style = MaterialTheme.typography.titleMedium)

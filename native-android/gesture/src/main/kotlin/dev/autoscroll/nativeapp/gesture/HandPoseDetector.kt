@@ -59,11 +59,11 @@ class HandPoseDetector(val config: HandPoseDetectionConfig = HandPoseDetectionCo
         if (previous != null && time - previous > config.maximumSampleGapMs) discardEvidence()
         currentPose = classifier.classify(pose.landmarks, activePose)
         when (phase) {
-            HandPosePhase.READY -> if (isPointing(currentPose)) beginCandidate(time)
+            HandPosePhase.READY -> if (isAction(currentPose)) beginCandidate(time)
             HandPosePhase.CONFIRMING -> {
                 if (currentPose != activePose) {
                     discardEvidence()
-                    if (isPointing(currentPose)) beginCandidate(time)
+                    if (isAction(currentPose)) beginCandidate(time)
                     return null
                 }
                 if (observations < config.minimumObservations) observations++
@@ -73,7 +73,7 @@ class HandPoseDetector(val config: HandPoseDetectionConfig = HandPoseDetectionCo
                     phase = HandPosePhase.LATCHED
                     candidateStart = null
                     observations = 0
-                    if (config.rearmMode == HandPoseRearmMode.STABLE_POSE) {
+                    if (!config.tapGesturesEnabled && config.rearmMode == HandPoseRearmMode.STABLE_POSE) {
                         rearmStart = time
                         rearmObservations = 1
                         rearmPose = currentPose
@@ -87,6 +87,7 @@ class HandPoseDetector(val config: HandPoseDetectionConfig = HandPoseDetectionCo
     }
 
     private fun updateRearm(time: Long) {
+        if (config.tapGesturesEnabled) return updateTapRearm(time)
         val openHand = config.rearmMode == HandPoseRearmMode.OPEN_HAND
         val valid = if (openHand) currentPose == RecognizedHandPose.NEUTRAL else currentPose != RecognizedHandPose.UNKNOWN
         if (!valid) {
@@ -109,6 +110,30 @@ class HandPoseDetector(val config: HandPoseDetectionConfig = HandPoseDetectionCo
         }
     }
 
+    private fun updateTapRearm(time: Long) {
+        val previousPose = lastEvent!!.pose
+        val valid = currentPose != RecognizedHandPose.UNKNOWN && currentPose != previousPose &&
+            !(isPointing(currentPose) && isPointing(previousPose))
+        if (!valid) {
+            discardEvidence()
+            return
+        }
+        phase = HandPosePhase.WAITING_REARM
+        if (rearmStart == null || rearmPose != currentPose) {
+            rearmStart = time
+            rearmObservations = 1
+            rearmPose = currentPose
+            return
+        }
+        if (rearmObservations < 2) rearmObservations++
+        if (time - rearmStart!! >= config.releaseDurationMs && rearmObservations >= 2 && cooldownRemainingMs == 0L) {
+            phase = HandPosePhase.READY
+            activePose = null
+            discardEvidence()
+            if (isAction(currentPose)) beginCandidate(time)
+        }
+    }
+
     private fun beginCandidate(time: Long) {
         phase = HandPosePhase.CONFIRMING
         activePose = currentPose
@@ -118,6 +143,9 @@ class HandPoseDetector(val config: HandPoseDetectionConfig = HandPoseDetectionCo
 
     private fun isPointing(pose: RecognizedHandPose): Boolean =
         pose == RecognizedHandPose.POINTING_UP || pose == RecognizedHandPose.POINTING_DOWN
+
+    private fun isAction(pose: RecognizedHandPose): Boolean = isPointing(pose) ||
+        (config.tapGesturesEnabled && (pose == RecognizedHandPose.NEUTRAL || pose == RecognizedHandPose.THUMBS_UP))
 
     private fun discardEvidence() {
         candidateStart = null

@@ -13,7 +13,7 @@ data class NativeSettings(
     val tracking: TrackingConfig = TrackingConfig(),
     val motion: MotionDetectionConfig = MotionDetectionConfig(),
     val flick: FlickDetectionConfig = FlickDetectionConfig(),
-    val pose: HandPoseDetectionConfig = HandPoseDetectionConfig(),
+    val pose: HandPoseDetectionConfig = HandPoseDetectionConfig(tapGesturesEnabled = true),
     val scroll: ScrollConfig = ScrollConfig(),
     val swipeDurationMs: Long = 220,
     val swipeDistance: Double = 0.5,
@@ -41,6 +41,7 @@ class SettingsStore(context: Context) {
                 rearmDurationMs = number("flickRearm", 150.0).toLong(),
             ),
             pose = HandPoseDetectionConfig(
+                tapGesturesEnabled = true,
                 confirmationDurationMs = number("poseConfirm", 180.0).toLong(),
                 releaseDurationMs = number("poseRelease", 180.0).toLong(),
                 cooldownMs = number("poseCooldown", 450.0).toLong(),

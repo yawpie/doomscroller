@@ -57,18 +57,21 @@ class ScrollActionCoordinator(
         val flick = decision.flick
         if (pose != null || flick != null) {
             stopContinuous()
-            if (pose != null && pose.pose != RecognizedHandPose.POINTING_DOWN &&
-                pose.pose != RecognizedHandPose.POINTING_UP) return reject("Pose has no scroll direction")
+            val action = if (pose != null) when (pose.pose) {
+                RecognizedHandPose.POINTING_DOWN -> direction(true)
+                RecognizedHandPose.POINTING_UP -> direction(false)
+                RecognizedHandPose.NEUTRAL -> ScrollAction.SINGLE_TAP
+                RecognizedHandPose.THUMBS_UP -> ScrollAction.DOUBLE_TAP
+                else -> return reject("Pose has no screen action")
+            } else direction(flick!!.direction == FlickDirection.DOWN)
             val timestamp = pose?.timestampMs ?: flick!!.timestampMs
             if (timestamp > clockMs()) return reject("Gesture timestamp is in the future")
             if (timestamp <= lastDiscreteTimestamp) return reject("Duplicate or out-of-order gesture")
             lastDiscreteTimestamp = timestamp
-            val down = if (pose != null) pose.pose == RecognizedHandPose.POINTING_DOWN
-                else flick!!.direction == FlickDirection.DOWN
-            val action = direction(down)
             val distance = if (pose == null && config.flickAction == FlickScrollAction.FAST_SCROLL)
                 config.flickScrollDistance else null
-            dispatch(ScrollRequest(action, distance, config.flickDurationMs), timestamp)
+            val request = if (action.isTap) ScrollRequest(action) else ScrollRequest(action, distance, config.flickDurationMs)
+            dispatch(request, timestamp)
             return
         }
         if (decision.suppressesContinuous) return stopContinuous()
@@ -107,7 +110,7 @@ class ScrollActionCoordinator(
     private fun dispatch(request: ScrollRequest, timestamp: Long, manual: Boolean = false) {
         if (!state.value.sessionActive) return reject("Session is paused or stopped")
         if (!fresh(timestamp)) return reject("Stale gesture or previous session")
-        if (operation?.isActive == true) return reject("Swipe already in progress")
+        if (operation?.isActive == true) return reject("Screen action already in progress")
         if (!executor.isReady) return reject("Accessibility service unavailable")
         val token = generation
         operation = scope.launch(start = CoroutineStart.LAZY) {
@@ -129,7 +132,7 @@ class ScrollActionCoordinator(
             } catch (failure: Exception) {
                 if (token == generation) mutableState.value = state.value.copy(
                     lastResult = ScrollExecutionResult.REJECTED,
-                    rejectionReason = failure.message ?: "Swipe execution failed")
+                    rejectionReason = failure.message ?: "Screen action execution failed")
             } finally {
                 if (token == generation) {
                     operation = null

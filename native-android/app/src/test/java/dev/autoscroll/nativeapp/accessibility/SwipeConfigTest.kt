@@ -11,6 +11,22 @@ import org.junit.Test
 class SwipeConfigTest {
     private val bounds = SwipeBounds(10, 40, 400, 800)
 
+    @Test fun tapsUseContentCenterWithoutMovementOrSwipeDuration() {
+        for (action in listOf(ScrollAction.SINGLE_TAP, ScrollAction.DOUBLE_TAP)) {
+            val coordinates = swipeCoordinates(SwipeConfig(x = 0.2, durationMs = 1000), bounds, ScrollRequest(action))
+            assertEquals(210f, coordinates.x)
+            assertEquals(440f, coordinates.startY)
+            assertEquals(coordinates.startY, coordinates.endY)
+            assertEquals(50L, coordinates.durationMs)
+            val overlay = SwipeBounds(170, 400, 90, 80)
+            val clear = avoidOverlay(coordinates, bounds, overlay)!!
+            assertTrue(clear.x < overlay.left || clear.x > overlay.left + overlay.width)
+            assertNull(avoidOverlay(coordinates, bounds, SwipeBounds(0, 400, 450, 80)))
+            org.junit.Assert.assertThrows(IllegalArgumentException::class.java) { ScrollRequest(action, 10.0) }
+            org.junit.Assert.assertThrows(IllegalArgumentException::class.java) { ScrollRequest(action, durationMs = 1000) }
+        }
+    }
+
     @Test fun downwardNavigationUsesAnUpwardScreenSwipe() {
         val forward = swipeCoordinates(SwipeConfig(), bounds, ScrollRequest(ScrollAction.FORWARD))
         assertEquals(210f, forward.x)

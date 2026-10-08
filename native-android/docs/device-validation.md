@@ -14,9 +14,11 @@ Then Start from the visible dashboard, wait for Active, switch to the feed. Tap/
 | --- | --- |
 | Point up |20 deliberate confirmations; one backward action per pose; no repeat while held 5 seconds |
 | Point down |20 deliberate confirmations; one forward action per pose |
-| Rearm |20 open-hand release/repoint cycles; direct up/down switching cannot rearm; tracking loss does not count as neutral |
+| Rearm |20 closed-hand release/repoint cycles; direct up/down switching cannot rearm; tracking loss does not count as release; open hand after pointing must produce one single tap |
+| Open hand |20 confirmations per hand in HYBRID/POSE; one center single tap; no repeat while held 5 seconds; independently observe pause/play toggle in supporting feeds |
+| Thumbs-up |20 confirmations per hand; one center double tap; test wrist rotation, curled thumb, partial visibility and non-curled fingers; no repeat while held 5 seconds |
 | Flick |20 per direction; cooldown+settlement before another flick |
-| Neutral/jitter |20 trials with no unintended discrete action |
+| Unknown/jitter |20 malformed/partial/noisy pose trials with no unintended discrete action; open hand is now an intentional single-tap pose |
 | Continuous |stationary calibration, slow up/down, reversal, idle, loss and reacquisition; measure touch threshold in each target app |
 | Camera |normal/low/bright light, near/far hand, partial visibility, fast and slow motion |
 | Overlay |drag near edges/center, expand/collapse, long press, Stop during swipe; injected path must not touch overlay |
