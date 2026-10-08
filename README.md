@@ -25,6 +25,10 @@ Android configuration is included: `minSdk = 24`, CAMERA permission, front-camer
 1. Tap **Start tracking**, grant camera permission, and hold one hand in the front preview.
 2. Hold still for approximately 600 ms to establish the neutral Y reference. Calibration is automatic and does not gate movement.
 3. Move down to increase the content offset, or up to decrease it. Faster motion increases speed; holding still stops. At the top, upward motion cannot move the list further.
+   Move slowly for continuous scrolling; flick quickly to move one viewport.
+   After a flick, let the hand settle before flicking again. Inversion also applies
+   to flicks. Configured fixed-distance fast scrolling is available through
+   `ScrollConfig.flickAction`.
 4. Adjust **Sensitivity** (300–4000 pixels per normalized image height), or toggle **Invert scroll**. A setting change stops the old command until the next hand result.
 5. Toggle **Debug overlay** for all 21 landmarks, emphasized wrist/palm bases, yellow palm center, green neutral line, palm X/Y and inference latency. Disable it to reduce debug painting.
 6. **Stop tracking** stops scrolling and releases the camera/detector. Backgrounding suspends them; returning resumes only if tracking was requested. After permission denial, retry or enable Camera in Android app settings if Android no longer prompts.
@@ -39,6 +43,7 @@ Front camera (requested 30 FPS preview, medium resolution)
   -> MethodChannel -> Kotlin worker: sampled YUV420 -> RGB -> upright rotation
   -> official MediaPipe Hand Landmarker, CPU / VIDEO mode / one hand
   -> timestamped HandTrackingResult with 21 indexed xyz landmarks
+  -> raw palm flick detector + continuous/flick coordination
   -> palm center -> EMA -> bounded timestamped regression window
   -> displacement/velocity thresholds + stationary/jump guards -> HandMotion
   -> proportional velocity mapper -> display ticker -> Flutter ScrollController
@@ -85,6 +90,10 @@ Release shrinking rules preserve the protobuf/JNI/Flogger contracts required by 
 ## Motion algorithm and configuration
 
 `lib/core/config.dart` is the tuning point; Riverpod provider overrides can configure services before they are created. Sensitivity and inversion also change live from the screen.
+
+Flick detection, experimental defaults, action configuration, re-arming, and
+performance limits are documented in [docs/flick-gestures.md](docs/flick-gestures.md).
+The native model and continuous-motion algorithm are preserved.
 
 - Palm X/Y averages wrist and four finger bases: indices 0, 5, 9, 13, 17. Fingertips do not control the position.
 - EMA: `smoothedY = alpha * currentY + (1-alpha) * previousY`. The default alpha is 0.4; the existing PositionSmoother can be replaced.

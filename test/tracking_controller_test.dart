@@ -10,6 +10,7 @@ import 'package:autoscroll_compvis/features/auto_scroll/domain/scroll_service.da
 import 'package:autoscroll_compvis/features/camera/application/camera_service.dart';
 import 'package:autoscroll_compvis/features/camera/domain/camera_frame.dart';
 import 'package:autoscroll_compvis/features/gesture/application/windowed_motion_detection_service.dart';
+import 'package:autoscroll_compvis/features/gesture/domain/flick_event.dart';
 import 'package:autoscroll_compvis/features/gesture/domain/hand_motion.dart';
 import 'package:autoscroll_compvis/features/hand_tracking/domain/hand_models.dart';
 import 'package:autoscroll_compvis/features/hand_tracking/domain/hand_tracking_service.dart';
@@ -68,15 +69,26 @@ class FakeTracker implements HandTrackingService {
 
 class FakeScroll implements ScrollService {
   final List<HandMotion> motions = [];
+  final List<FlickEvent> flicks = [];
+  int stops = 0;
   @override
   void handle(HandMotion motion) => motions.add(motion);
   @override
-  void stop() {}
+  void handleFlick(FlickEvent event) => flicks.add(event);
+  @override
+  void stop() => stops++;
   @override
   void dispose() {}
 }
 
 Future<void> flush() => Future<void>.delayed(Duration.zero);
+
+HandPose poseAt(double y) => HandPose(
+  landmarks: List.generate(
+    21,
+    (i) => HandLandmark(index: i, x: 0.5, y: y, z: 0),
+  ),
+);
 
 void main() {
   late FakeCamera camera;
@@ -101,6 +113,125 @@ void main() {
     );
   });
   tearDown(() => controller.dispose());
+
+  Future<void> frame(int ms, double? y) async {
+    tracker.pose = y == null ? null : poseAt(y);
+    camera.emit(ms);
+    await flush();
+  }
+
+  for (final direction in [-1.0, 1.0]) {
+    test(
+      'controller dispatches one ${direction < 0 ? 'up' : 'down'} flick without continuous scroll',
+      () async {
+        await controller.start();
+        for (var i = 0; i < 5; i++) {
+          await frame(i * 100, 0.5 + direction * i * 0.1);
+        }
+        expect(scroll.flicks, hasLength(1));
+        expect(
+          scroll.flicks.single.direction,
+          direction < 0 ? FlickDirection.up : FlickDirection.down,
+        );
+        expect(
+          scroll.motions.any(
+            (motion) =>
+                motion.action == HandAction.moveUp ||
+                motion.action == HandAction.moveDown,
+          ),
+          isFalse,
+        );
+      },
+    );
+  }
+
+  test(
+    'loss during flick candidate stops and requires fresh acquisition',
+    () async {
+      await controller.start();
+      await frame(0, 0.5);
+      await frame(100, 0.6);
+      await frame(200, null);
+      expect(scroll.motions.last.action, HandAction.stop);
+      await frame(300, 0.8);
+      await frame(400, 0.8);
+      expect(scroll.flicks, isEmpty);
+    },
+  );
+
+  test(
+    'background reset cannot retain a partial flick into a new session',
+    () async {
+      await controller.start();
+      await frame(0, 0.5);
+      await frame(100, 0.6);
+      await controller.setForeground(false);
+      final stops = scroll.stops;
+      await controller.setForeground(true);
+      await frame(300, 0.8);
+      expect(scroll.flicks, isEmpty);
+      await frame(400, 0.7);
+      await frame(500, 0.6);
+      expect(scroll.flicks, hasLength(1));
+      expect(scroll.flicks.single.direction, FlickDirection.up);
+      expect(scroll.stops, greaterThanOrEqualTo(stops));
+    },
+  );
+
+  test(
+    'stop ignores an in-flight result that would complete a flick',
+    () async {
+      await controller.start();
+      await frame(0, 0.5);
+      await frame(100, 0.6);
+      tracker.pending = Completer();
+      camera.emit(200);
+      final stopping = controller.stop();
+      tracker.pending!.complete(
+        HandTrackingResult(
+          timestamp: const Duration(milliseconds: 200),
+          pose: poseAt(0.7),
+        ),
+      );
+      await stopping;
+      expect(scroll.flicks, isEmpty);
+      expect(states.last.running, isFalse);
+    },
+  );
+
+  test(
+    'watchdog clears a candidate while preserving cooldown after a trigger',
+    () async {
+      await controller.dispose();
+      controller = TrackingController(
+        camera: camera,
+        tracker: tracker,
+        scroll: scroll,
+        motionDetector: WindowedMotionDetectionService(
+          const MotionDetectionConfig(),
+        ),
+        config: const TrackingConfig(lostAfter: Duration(milliseconds: 30)),
+        onState: states.add,
+      );
+      await controller.start();
+      await frame(0, 0.5);
+      await frame(100, 0.6);
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      expect(states.last.phase, TrackingPhase.lost);
+      await frame(200, 0.7);
+      expect(scroll.flicks, isEmpty);
+      await frame(300, 0.7);
+      await frame(400, 0.7);
+      await frame(500, 0.6);
+      await frame(600, 0.5);
+      expect(scroll.flicks, hasLength(1));
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      await frame(700, 0.7);
+      await frame(800, 0.6);
+      await frame(900, 0.5);
+      expect(scroll.flicks, hasLength(1));
+    },
+  );
 
   test(
     'busy frames are dropped and completed frames respect FPS limit',

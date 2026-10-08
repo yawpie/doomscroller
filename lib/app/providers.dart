@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/config.dart';
 import '../features/camera/application/camera_service.dart';
 import '../features/camera/infrastructure/front_camera_service.dart';
+import '../features/gesture/application/flick_detector.dart';
 import '../features/gesture/application/windowed_motion_detection_service.dart';
 import '../features/gesture/domain/motion_detection_service.dart';
 import '../features/hand_tracking/domain/hand_tracking_service.dart';
@@ -14,6 +15,7 @@ import '../features/auto_scroll/infrastructure/flutter_scroll_service.dart';
 
 final trackingConfigProvider = Provider((ref) => const TrackingConfig());
 final motionConfigProvider = Provider((ref) => const MotionDetectionConfig());
+final flickConfigProvider = Provider((ref) => const FlickDetectionConfig());
 final scrollConfigProvider = Provider((ref) => const ScrollConfig());
 
 final cameraServiceProvider = Provider<CameraService>(
@@ -40,6 +42,7 @@ final trackingProvider = NotifierProvider<TrackingNotifier, TrackingState>(
       camera: ref.read(cameraServiceProvider),
       tracker: ref.read(handTrackingServiceProvider),
       motionDetector: ref.read(motionDetectionServiceProvider),
+      flickDetector: FlickDetector(ref.read(flickConfigProvider)),
       scroll: ref.read(scrollServiceProvider),
       config: ref.read(trackingConfigProvider),
       onState: onState,

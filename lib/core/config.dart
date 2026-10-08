@@ -1,11 +1,11 @@
 class TrackingConfig {
   const TrackingConfig({
-    this.inferenceFps = 12,
-    this.detectionConfidence = 0.5,
-    this.presenceConfidence = 0.5,
-    this.trackingConfidence = 0.5,
+    this.inferenceFps = 15,
+    this.detectionConfidence = 0.4,
+    this.presenceConfidence = 0.4,
+    this.trackingConfidence = 0.6,
     this.maximumInferenceDimension = 320,
-    this.lostAfter = const Duration(milliseconds: 750),
+    this.lostAfter = const Duration(milliseconds: 500),
   }) : assert(inferenceFps > 0 && inferenceFps <= 30),
        assert(detectionConfidence >= 0 && detectionConfidence <= 1),
        assert(presenceConfidence >= 0 && presenceConfidence <= 1),
@@ -28,8 +28,8 @@ class TrackingConfig {
 class MotionDetectionConfig {
   const MotionDetectionConfig({
     this.smoothingAlpha = 0.4,
-    this.windowSize = 6,
-    this.minimumFrames = 4,
+    this.windowSize = 4,
+    this.minimumFrames = 3,
     this.movementThreshold = 0.018,
     this.deadZone = 0.008,
     this.minimumVelocity = 0.025,
@@ -65,6 +65,42 @@ class MotionDetectionConfig {
   final double calibrationRadius;
 }
 
+// Thresholds are experimental and should be tuned on the target phone.
+class FlickDetectionConfig {
+  const FlickDetectionConfig({
+    this.minimumVelocity = 0.8,
+    this.minimumDisplacement = 0.10,
+    this.minimumDuration = const Duration(milliseconds: 80),
+    this.maximumDuration = const Duration(milliseconds: 350),
+    this.cooldown = const Duration(milliseconds: 500),
+    this.directionConsistency = 0.75,
+    this.maximumSampleGap = const Duration(milliseconds: 250),
+    this.maximumPositionJump = 0.25,
+    this.rearmVelocity = 0.15,
+    this.rearmDuration = const Duration(milliseconds: 150),
+    this.rearmRadius = 0.012,
+  }) : assert(minimumVelocity > 0),
+       assert(minimumDisplacement > 0 && minimumDisplacement <= 1),
+       assert(directionConsistency > 0 && directionConsistency <= 1),
+       assert(maximumPositionJump > 0 && maximumPositionJump <= 1),
+       assert(rearmVelocity >= 0 && rearmVelocity < minimumVelocity * 0.5),
+       assert(rearmRadius > 0 && rearmRadius < minimumDisplacement);
+
+  final double minimumVelocity;
+  final double minimumDisplacement;
+  final Duration minimumDuration;
+  final Duration maximumDuration;
+  final Duration cooldown;
+  final double directionConsistency;
+  final Duration maximumSampleGap;
+  final double maximumPositionJump;
+  final double rearmVelocity;
+  final Duration rearmDuration;
+  final double rearmRadius;
+}
+
+enum FlickScrollAction { page, fastScroll }
+
 class ScrollConfig {
   const ScrollConfig({
     this.pixelsPerNormalizedUnit = 1800,
@@ -74,10 +110,14 @@ class ScrollConfig {
     this.smoothingAlpha = 0.3,
     this.minimumSensitivity = 300,
     this.maximumSensitivity = 4000,
+    this.flickAction = FlickScrollAction.page,
+    this.flickScrollDistance = 600,
+    this.flickDuration = const Duration(milliseconds: 220),
   }) : assert(pixelsPerNormalizedUnit > 0),
        assert(maximumPixelsPerSecond > 0),
        assert(deadZone >= 0),
        assert(smoothingAlpha > 0 && smoothingAlpha <= 1),
+       assert(flickScrollDistance > 0),
        assert(
          minimumSensitivity > 0 &&
              maximumSensitivity >= pixelsPerNormalizedUnit &&
@@ -91,4 +131,7 @@ class ScrollConfig {
   final double smoothingAlpha;
   final double minimumSensitivity;
   final double maximumSensitivity;
+  final FlickScrollAction flickAction;
+  final double flickScrollDistance;
+  final Duration flickDuration;
 }

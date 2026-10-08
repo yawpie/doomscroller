@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/config.dart';
 import '../../camera/application/camera_service.dart';
 import '../../camera/domain/camera_frame.dart';
+import '../../gesture/application/flick_detector.dart';
+import '../../gesture/application/gesture_coordinator.dart';
 import '../../gesture/domain/hand_motion.dart';
 import '../../gesture/domain/motion_detection_service.dart';
 import '../../hand_tracking/domain/hand_tracking_service.dart';
@@ -19,14 +21,20 @@ class TrackingController {
     required this.camera,
     required this.tracker,
     required this.motionDetector,
+    FlickDetector? flickDetector,
     required this.scroll,
     required this.config,
     required this.onState,
-  });
+  }) : _gestures = GestureCoordinator(
+         motionDetector: motionDetector,
+         flickDetector:
+             flickDetector ?? FlickDetector(const FlickDetectionConfig()),
+       );
 
   final CameraService camera;
   final HandTrackingService tracker;
   final MotionDetectionService motionDetector;
+  final GestureCoordinator _gestures;
   final ScrollService scroll;
   final TrackingConfig config;
   final void Function(TrackingState) onState;
@@ -143,21 +151,23 @@ class TrackingController {
       final latency = Stopwatch()..start();
       final result = await tracker.track(frame);
       if (!_shouldRun || generation != _generation) return;
-      final motion = motionDetector.process(result);
-      scroll.handle(motion);
+      if (latency.elapsed >= config.lostAfter) {
+        _resultWatchdog?.cancel();
+        _handleTrackingLoss();
+        return;
+      }
+      final decision = _gestures.process(result);
+      final motion = decision.motion;
+      final flick = decision.flick;
+      if (flick != null) {
+        scroll.handleFlick(flick);
+      } else {
+        scroll.handle(motion);
+      }
       _resultWatchdog?.cancel();
       _resultWatchdog = Timer(config.lostAfter, () {
         if (!_shouldRun || generation != _generation) return;
-        scroll.stop();
-        motionDetector.reset();
-        _emit(
-          TrackingState(
-            running: true,
-            phase: _lastHand == null
-                ? TrackingPhase.searching
-                : TrackingPhase.lost,
-          ),
-        );
+        _handleTrackingLoss();
       });
       if (result.handDetected) _lastHand = result.timestamp;
       final phase = result.handDetected
@@ -177,6 +187,7 @@ class TrackingController {
           running: true,
           result: result,
           motion: motion,
+          flick: flick,
           inferenceFps: _fps,
           phase: phase,
           inferenceMilliseconds: latency.elapsedMicroseconds / 1000,
@@ -196,6 +207,17 @@ class TrackingController {
     }
   }
 
+  void _handleTrackingLoss() {
+    scroll.stop();
+    _gestures.loseTracking();
+    _emit(
+      TrackingState(
+        running: true,
+        phase: _lastHand == null ? TrackingPhase.searching : TrackingPhase.lost,
+      ),
+    );
+  }
+
   Future<void> _release() async {
     _generation++;
     _resultWatchdog?.cancel();
@@ -211,7 +233,7 @@ class TrackingController {
           await _inference;
           await tracker.dispose();
         } finally {
-          motionDetector.reset();
+          _gestures.reset();
           _fpsClock.stop();
         }
       }

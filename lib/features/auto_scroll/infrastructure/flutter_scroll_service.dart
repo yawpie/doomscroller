@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/scheduler.dart';
@@ -5,11 +6,19 @@ import 'package:flutter/widgets.dart';
 
 import '../../../core/config.dart';
 import '../../gesture/domain/hand_motion.dart';
+import '../../gesture/domain/flick_event.dart';
 import '../domain/scroll_service.dart';
 import '../application/scroll_velocity_mapper.dart';
 
 class FlutterScrollService implements ScrollService {
   FlutterScrollService(this.config) : mapper = ScrollVelocityMapper(config) {
+    if (config.flickDuration <= Duration.zero ||
+        !config.flickScrollDistance.isFinite ||
+        config.flickScrollDistance <= 0) {
+      throw ArgumentError(
+        'Flick distance and animation duration must be positive.',
+      );
+    }
     _ticker = Ticker(_tick);
   }
 
@@ -23,15 +32,23 @@ class FlutterScrollService implements ScrollService {
   double _pixelsPerSecond = 0;
   double _targetVelocity = 0;
   bool _disposed = false;
+  bool _flickAnimating = false;
+  int _animationGeneration = 0;
 
   @override
   void handle(HandMotion motion) {
     if (_disposed) return;
     final target = mapper.map(motion);
     if (target == 0) {
-      stop();
+      if (motion.action == HandAction.stop) {
+        stop();
+      } else {
+        // Suppressed inference samples must not cancel a discrete flick.
+        _stopContinuous();
+      }
       return;
     }
+    _cancelFlick();
     if (_targetVelocity.sign != target.sign) _pixelsPerSecond = 0;
     _targetVelocity = target;
     _freshness
@@ -41,6 +58,38 @@ class FlutterScrollService implements ScrollService {
       _previousTick = Duration.zero;
       _ticker.start();
     }
+  }
+
+  @override
+  void handleFlick(FlickEvent event) {
+    if (_disposed) return;
+    stop();
+    if (!controller.hasClients) return;
+    final position = controller.position;
+    final distance = config.flickAction == FlickScrollAction.page
+        ? position.viewportDimension
+        : config.flickScrollDistance;
+    final direction =
+        (event.direction == FlickDirection.up ? -1 : 1) *
+        (mapper.inverted ? -1 : 1);
+    final target = (position.pixels + distance * direction).clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
+    if (target == position.pixels) return;
+    final generation = ++_animationGeneration;
+    _flickAnimating = true;
+    unawaited(
+      controller
+          .animateTo(
+            target,
+            duration: config.flickDuration,
+            curve: Curves.easeOutCubic,
+          )
+          .whenComplete(() {
+            if (generation == _animationGeneration) _flickAnimating = false;
+          }),
+    );
   }
 
   void _tick(Duration elapsed) {
@@ -73,6 +122,18 @@ class FlutterScrollService implements ScrollService {
   @override
   void stop() {
     if (_disposed) return;
+    _stopContinuous();
+    _cancelFlick();
+  }
+
+  void _cancelFlick() {
+    if (!_flickAnimating) return;
+    _animationGeneration++;
+    _flickAnimating = false;
+    if (controller.hasClients) controller.jumpTo(controller.position.pixels);
+  }
+
+  void _stopContinuous() {
     _pixelsPerSecond = 0;
     _targetVelocity = 0;
     velocity.value = 0;

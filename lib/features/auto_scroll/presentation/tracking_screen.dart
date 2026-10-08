@@ -122,11 +122,11 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
                                         'Tracking: ${state.phase.name.toUpperCase()}',
                                       ),
                                       Text(
-                                        'Action: ${switch (state.motion.action) {
-                                          HandAction.moveUp => 'UP',
-                                          HandAction.moveDown => 'DOWN',
-                                          _ => 'IDLE',
-                                        }}',
+                                        'Action: ${state.flick != null ? 'FLICK ${state.flick!.direction.name.toUpperCase()}' : switch (state.motion.action) {
+                                                HandAction.moveUp => 'UP',
+                                                HandAction.moveDown => 'DOWN',
+                                                _ => 'IDLE',
+                                              }}',
                                       ),
                                       Text(
                                         'Hand velocity: ${state.motion.verticalVelocity.toStringAsFixed(3)} heights/s',
@@ -230,7 +230,7 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
                   itemBuilder: (context, index) => ListTile(
                     title: Text('Reading item ${index + 1}'),
                     subtitle: const Text(
-                      'Move your hand down to read ahead, or up to go back.',
+                      'Move slowly to scroll; flick to move one page. Down goes ahead, up goes back.',
                     ),
                   ),
                 ),
