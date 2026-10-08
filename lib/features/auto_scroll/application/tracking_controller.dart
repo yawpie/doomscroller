@@ -9,8 +9,11 @@ import '../../camera/application/camera_service.dart';
 import '../../camera/domain/camera_frame.dart';
 import '../../gesture/application/flick_detector.dart';
 import '../../gesture/application/gesture_coordinator.dart';
+import '../../gesture/application/hand_pose_detector.dart';
+import '../../gesture/domain/flick_event.dart';
 import '../../gesture/domain/hand_motion.dart';
 import '../../gesture/domain/motion_detection_service.dart';
+import '../../gesture/domain/pose_event.dart';
 import '../../hand_tracking/domain/hand_tracking_service.dart';
 import '../domain/scroll_service.dart';
 import 'tracking_state.dart';
@@ -22,6 +25,8 @@ class TrackingController {
     required this.tracker,
     required this.motionDetector,
     FlickDetector? flickDetector,
+    HandPoseDetector? poseDetector,
+    GestureMode gestureMode = GestureMode.combined,
     required this.scroll,
     required this.config,
     required this.onState,
@@ -29,6 +34,8 @@ class TrackingController {
          motionDetector: motionDetector,
          flickDetector:
              flickDetector ?? FlickDetector(const FlickDetectionConfig()),
+         poseDetector: poseDetector,
+         mode: gestureMode,
        );
 
   final CameraService camera;
@@ -43,6 +50,7 @@ class TrackingController {
   Future<void> _commands = Future.value();
   Future<void>? _inference;
   Duration? _lastAccepted;
+  Duration? _lastResultTimestamp;
   bool _wanted = false;
   bool _foreground = true;
   bool _closed = false;
@@ -53,6 +61,30 @@ class TrackingController {
   Timer? _resultWatchdog;
 
   bool get _shouldRun => _wanted && _foreground && !_closed;
+
+  void updateGestureSettings({
+    HandPoseDetectionConfig? poseConfig,
+    GestureMode? mode,
+  }) {
+    if (_closed) return;
+    final detector = poseConfig == null ? null : HandPoseDetector(poseConfig);
+    _generation++;
+    _resultWatchdog?.cancel();
+    scroll.stop();
+    _gestures.configure(detector: detector, mode: mode);
+    if (_shouldRun && _state.running) _armResultWatchdog(_generation);
+    _emit(
+      TrackingState(
+        running: _state.running,
+        busy: _state.busy,
+        result: _state.result,
+        phase: _state.phase,
+        inferenceFps: _state.inferenceFps,
+        inferenceMilliseconds: _state.inferenceMilliseconds,
+        error: _state.error,
+      ),
+    );
+  }
 
   Future<void> start() {
     _wanted = true;
@@ -112,6 +144,7 @@ class TrackingController {
       _completed = 0;
       _fps = 0;
       _lastAccepted = null;
+      _lastResultTimestamp = null;
       _lastHand = null;
       _emit(
         const TrackingState(
@@ -156,19 +189,31 @@ class TrackingController {
         _handleTrackingLoss();
         return;
       }
+      final previousTimestamp = _lastResultTimestamp;
+      if (result.timestamp != frame.timestamp ||
+          result.timestamp < Duration.zero ||
+          (previousTimestamp != null &&
+              result.timestamp <= previousTimestamp)) {
+        _handleTrackingLoss();
+        return;
+      }
+      _lastResultTimestamp = result.timestamp;
       final decision = _gestures.process(result);
       final motion = decision.motion;
       final flick = decision.flick;
-      if (flick != null) {
+      final pose = decision.pose;
+      if (pose != null) {
+        scroll.scrollByPage(
+          pose.pose == RecognizedHandPose.pointingUp
+              ? FlickDirection.up
+              : FlickDirection.down,
+        );
+      } else if (flick != null) {
         scroll.handleFlick(flick);
       } else {
         scroll.handle(motion);
       }
-      _resultWatchdog?.cancel();
-      _resultWatchdog = Timer(config.lostAfter, () {
-        if (!_shouldRun || generation != _generation) return;
-        _handleTrackingLoss();
-      });
+      _armResultWatchdog(generation);
       if (result.handDetected) _lastHand = result.timestamp;
       final phase = result.handDetected
           ? TrackingPhase.tracking
@@ -188,6 +233,11 @@ class TrackingController {
           result: result,
           motion: motion,
           flick: flick,
+          currentPose: _gestures.poseDetector.currentPose,
+          posePhase: _gestures.poseDetector.phase,
+          lastPose: _gestures.poseDetector.lastEvent,
+          confirmationProgress: _gestures.poseDetector.confirmationProgress,
+          cooldownRemaining: _gestures.poseDetector.cooldownRemaining,
           inferenceFps: _fps,
           phase: phase,
           inferenceMilliseconds: latency.elapsedMicroseconds / 1000,
@@ -207,6 +257,14 @@ class TrackingController {
     }
   }
 
+  void _armResultWatchdog(int generation) {
+    _resultWatchdog?.cancel();
+    _resultWatchdog = Timer(config.lostAfter, () {
+      if (!_shouldRun || generation != _generation) return;
+      _handleTrackingLoss();
+    });
+  }
+
   void _handleTrackingLoss() {
     scroll.stop();
     _gestures.loseTracking();
@@ -214,6 +272,11 @@ class TrackingController {
       TrackingState(
         running: true,
         phase: _lastHand == null ? TrackingPhase.searching : TrackingPhase.lost,
+        currentPose: _gestures.poseDetector.currentPose,
+        posePhase: _gestures.poseDetector.phase,
+        lastPose: _gestures.poseDetector.lastEvent,
+        confirmationProgress: _gestures.poseDetector.confirmationProgress,
+        cooldownRemaining: _gestures.poseDetector.cooldownRemaining,
       ),
     );
   }

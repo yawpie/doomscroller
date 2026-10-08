@@ -43,7 +43,7 @@ class FlutterScrollService implements ScrollService {
       if (motion.action == HandAction.stop) {
         stop();
       } else {
-        // Suppressed inference samples must not cancel a discrete flick.
+        // Suppressed inference samples must not cancel a discrete page action.
         _stopContinuous();
       }
       return;
@@ -62,15 +62,29 @@ class FlutterScrollService implements ScrollService {
 
   @override
   void handleFlick(FlickEvent event) {
+    _scrollDiscrete(
+      event.direction,
+      byPage: config.flickAction == FlickScrollAction.page,
+    );
+  }
+
+  @override
+  void scrollByPage(FlickDirection direction) =>
+      _scrollDiscrete(direction, byPage: true);
+
+  void _scrollDiscrete(
+    FlickDirection gestureDirection, {
+    required bool byPage,
+  }) {
     if (_disposed) return;
     stop();
     if (!controller.hasClients) return;
     final position = controller.position;
-    final distance = config.flickAction == FlickScrollAction.page
+    final distance = byPage
         ? position.viewportDimension
         : config.flickScrollDistance;
     final direction =
-        (event.direction == FlickDirection.up ? -1 : 1) *
+        (gestureDirection == FlickDirection.up ? -1 : 1) *
         (mapper.inverted ? -1 : 1);
     final target = (position.pixels + distance * direction).clamp(
       position.minScrollExtent,

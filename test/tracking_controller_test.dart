@@ -10,10 +10,14 @@ import 'package:autoscroll_compvis/features/auto_scroll/domain/scroll_service.da
 import 'package:autoscroll_compvis/features/camera/application/camera_service.dart';
 import 'package:autoscroll_compvis/features/camera/domain/camera_frame.dart';
 import 'package:autoscroll_compvis/features/gesture/application/windowed_motion_detection_service.dart';
+import 'package:autoscroll_compvis/features/gesture/application/gesture_coordinator.dart';
 import 'package:autoscroll_compvis/features/gesture/domain/flick_event.dart';
 import 'package:autoscroll_compvis/features/gesture/domain/hand_motion.dart';
+import 'package:autoscroll_compvis/features/gesture/domain/pose_event.dart';
 import 'package:autoscroll_compvis/features/hand_tracking/domain/hand_models.dart';
 import 'package:autoscroll_compvis/features/hand_tracking/domain/hand_tracking_service.dart';
+
+import 'support/hand_pose_fixtures.dart';
 
 class FakeCamera implements CameraService {
   void Function(CameraFrame)? onFrame;
@@ -70,11 +74,14 @@ class FakeTracker implements HandTrackingService {
 class FakeScroll implements ScrollService {
   final List<HandMotion> motions = [];
   final List<FlickEvent> flicks = [];
+  final List<FlickDirection> pages = [];
   int stops = 0;
   @override
   void handle(HandMotion motion) => motions.add(motion);
   @override
   void handleFlick(FlickEvent event) => flicks.add(event);
+  @override
+  void scrollByPage(FlickDirection direction) => pages.add(direction);
   @override
   void stop() => stops++;
   @override
@@ -119,6 +126,310 @@ void main() {
     camera.emit(ms);
     await flush();
   }
+
+  Future<void> poseFrame(int ms, RecognizedHandPose? pose) async {
+    tracker.pose = pose == null ? null : handPoseFixture(pose);
+    camera.emit(ms);
+    await flush();
+  }
+
+  Future<void> usePoseOnly({
+    TrackingConfig config = const TrackingConfig(),
+  }) async {
+    await controller.dispose();
+    controller = TrackingController(
+      camera: camera,
+      tracker: tracker,
+      scroll: scroll,
+      motionDetector: WindowedMotionDetectionService(
+        const MotionDetectionConfig(),
+      ),
+      gestureMode: GestureMode.poseOnly,
+      config: config,
+      onState: states.add,
+    );
+    await controller.start();
+  }
+
+  for (final (pose, direction) in [
+    (RecognizedHandPose.pointingUp, FlickDirection.up),
+    (RecognizedHandPose.pointingDown, FlickDirection.down),
+  ]) {
+    test('controller dispatches one page for held ${pose.name}', () async {
+      await controller.start();
+      for (var i = 0; i <= 30; i++) {
+        await poseFrame(i * 100, pose);
+      }
+      expect(scroll.pages, [direction]);
+      expect(scroll.flicks, isEmpty);
+      expect(
+        scroll.motions.any(
+          (motion) =>
+              motion.action == HandAction.moveUp ||
+              motion.action == HandAction.moveDown,
+        ),
+        isFalse,
+      );
+      expect(states.last.currentPose, pose);
+      expect(states.last.posePhase, HandPosePhase.latched);
+      expect(states.last.lastPose?.pose, pose);
+      expect(
+        states.last.lastPose?.timestamp,
+        const Duration(milliseconds: 200),
+      );
+    });
+  }
+
+  test(
+    'opposite pose and tracking loss cannot release a confirmed action',
+    () async {
+      await usePoseOnly();
+      for (final ms in [0, 100, 200]) {
+        await poseFrame(ms, RecognizedHandPose.pointingDown);
+      }
+      await poseFrame(300, null);
+      expect(scroll.motions.last.action, HandAction.stop);
+      for (var i = 4; i <= 10; i++) {
+        await poseFrame(i * 100, RecognizedHandPose.pointingUp);
+      }
+      expect(scroll.pages, [FlickDirection.down]);
+      expect(states.last.posePhase, HandPosePhase.latched);
+      for (final ms in [1100, 1200, 1300]) {
+        await poseFrame(ms, RecognizedHandPose.neutral);
+      }
+      expect(states.last.posePhase, HandPosePhase.ready);
+      for (final ms in [1400, 1500, 1600]) {
+        await poseFrame(ms, RecognizedHandPose.pointingUp);
+      }
+      expect(scroll.pages, [FlickDirection.down, FlickDirection.up]);
+    },
+  );
+
+  test(
+    'missing tracking discards a pose candidate and starts confirmation anew',
+    () async {
+      await usePoseOnly();
+      await poseFrame(0, RecognizedHandPose.pointingDown);
+      await poseFrame(100, RecognizedHandPose.pointingDown);
+      await poseFrame(200, null);
+      await poseFrame(300, RecognizedHandPose.pointingDown);
+      await poseFrame(400, RecognizedHandPose.pointingDown);
+      expect(scroll.pages, isEmpty);
+      await poseFrame(500, RecognizedHandPose.pointingDown);
+      expect(scroll.pages, [FlickDirection.down]);
+    },
+  );
+
+  test(
+    'duplicate and backward camera timestamps cannot complete a pose',
+    () async {
+      await usePoseOnly();
+      await poseFrame(0, RecognizedHandPose.pointingDown);
+      await poseFrame(100, RecognizedHandPose.pointingDown);
+      final calls = tracker.calls;
+      for (final ms in [100, 50, 100]) {
+        await poseFrame(ms, RecognizedHandPose.pointingDown);
+      }
+      expect(tracker.calls, calls);
+      expect(scroll.pages, isEmpty);
+      await poseFrame(200, RecognizedHandPose.pointingDown);
+      expect(scroll.pages, [FlickDirection.down]);
+    },
+  );
+
+  test(
+    'settings change rejects pending result and clears ownership without restart',
+    () async {
+      await usePoseOnly();
+      await poseFrame(0, RecognizedHandPose.pointingDown);
+      await poseFrame(100, RecognizedHandPose.pointingDown);
+      tracker.pending = Completer();
+      camera.emit(200);
+      final stops = scroll.stops;
+      controller.updateGestureSettings(mode: GestureMode.poseOnly);
+      expect(scroll.stops, greaterThan(stops));
+      expect(camera.onFrame, isNotNull);
+      expect(states.last.posePhase, HandPosePhase.ready);
+      tracker.pending!.complete(
+        poseSample(200, RecognizedHandPose.pointingDown),
+      );
+      await flush();
+      expect(scroll.pages, isEmpty);
+      tracker.pending = null;
+      await poseFrame(300, RecognizedHandPose.pointingUp);
+      await poseFrame(400, RecognizedHandPose.pointingUp);
+      expect(scroll.pages, isEmpty);
+      await poseFrame(500, RecognizedHandPose.pointingUp);
+      expect(scroll.pages, [FlickDirection.up]);
+    },
+  );
+
+  for (final confirmed in [false, true]) {
+    test(
+      'mismatched result discards candidate and preserves latch (confirmed=$confirmed)',
+      () async {
+        await usePoseOnly();
+        await poseFrame(0, RecognizedHandPose.pointingDown);
+        await poseFrame(100, RecognizedHandPose.pointingDown);
+        if (confirmed) await poseFrame(200, RecognizedHandPose.pointingDown);
+        tracker.pending = Completer();
+        final frameTime = confirmed ? 300 : 200;
+        camera.emit(frameTime);
+        final stops = scroll.stops;
+        tracker.pending!.complete(
+          poseSample(frameTime - 100, RecognizedHandPose.pointingDown),
+        );
+        await flush();
+        expect(scroll.stops, greaterThan(stops));
+        expect(states.last.phase, TrackingPhase.lost);
+        expect(states.last.currentPose, RecognizedHandPose.unknown);
+        expect(
+          states.last.posePhase,
+          confirmed ? HandPosePhase.latched : HandPosePhase.ready,
+        );
+        tracker.pending = null;
+        await poseFrame(400, RecognizedHandPose.pointingDown);
+        await poseFrame(500, RecognizedHandPose.pointingDown);
+        expect(scroll.pages, confirmed ? [FlickDirection.down] : isEmpty);
+        await poseFrame(600, RecognizedHandPose.pointingDown);
+        expect(scroll.pages, [FlickDirection.down]);
+      },
+    );
+  }
+
+  test(
+    'disabled pose configuration cannot dispatch and enabling starts fresh',
+    () async {
+      await usePoseOnly();
+      controller.updateGestureSettings(
+        poseConfig: const HandPoseDetectionConfig(enabled: false),
+      );
+      for (final ms in [0, 100, 200, 300]) {
+        await poseFrame(ms, RecognizedHandPose.pointingDown);
+      }
+      expect(scroll.pages, isEmpty);
+      controller.updateGestureSettings(
+        poseConfig: const HandPoseDetectionConfig(),
+      );
+      await poseFrame(400, RecognizedHandPose.pointingDown);
+      await poseFrame(500, RecognizedHandPose.pointingDown);
+      expect(scroll.pages, isEmpty);
+      await poseFrame(600, RecognizedHandPose.pointingDown);
+      expect(scroll.pages, [FlickDirection.down]);
+    },
+  );
+
+  test(
+    'background cleanup resets a pose latch for the resumed session',
+    () async {
+      await usePoseOnly();
+      for (final ms in [0, 100, 200]) {
+        await poseFrame(ms, RecognizedHandPose.pointingDown);
+      }
+      await controller.setForeground(false);
+      expect(states.last.posePhase, HandPosePhase.ready);
+      await controller.setForeground(true);
+      for (final ms in [300, 400, 500]) {
+        await poseFrame(ms, RecognizedHandPose.pointingDown);
+      }
+      expect(scroll.pages, [FlickDirection.down, FlickDirection.down]);
+    },
+  );
+
+  for (final cleanup in ['stop', 'dispose']) {
+    test('$cleanup rejects an in-flight pose confirmation', () async {
+      await usePoseOnly();
+      await poseFrame(0, RecognizedHandPose.pointingDown);
+      await poseFrame(100, RecognizedHandPose.pointingDown);
+      tracker.pending = Completer();
+      camera.emit(200);
+      final closing = cleanup == 'stop'
+          ? controller.stop()
+          : controller.dispose();
+      tracker.pending!.complete(
+        poseSample(200, RecognizedHandPose.pointingDown),
+      );
+      await closing;
+      expect(scroll.pages, isEmpty);
+      expect(camera.disposed && tracker.disposed, isTrue);
+      expect(camera.onFrame, isNull);
+    });
+  }
+
+  testWidgets('watchdog preserves a confirmed pose lock across reacquisition', (
+    tester,
+  ) async {
+    final localCamera = FakeCamera();
+    final localTracker = FakeTracker();
+    final localScroll = FakeScroll();
+    final localStates = <TrackingState>[];
+    final localController = TrackingController(
+      camera: localCamera,
+      tracker: localTracker,
+      scroll: localScroll,
+      motionDetector: WindowedMotionDetectionService(
+        const MotionDetectionConfig(),
+      ),
+      gestureMode: GestureMode.poseOnly,
+      config: const TrackingConfig(),
+      onState: localStates.add,
+    );
+    await localController.start();
+    for (final ms in [0, 100, 200]) {
+      localTracker.pose = handPoseFixture(RecognizedHandPose.pointingDown);
+      localCamera.emit(ms);
+      await tester.pump();
+    }
+    expect(localScroll.pages, [FlickDirection.down]);
+    final stops = localScroll.stops;
+    await tester.pump(const Duration(milliseconds: 501));
+    expect(localStates.last.phase, TrackingPhase.lost);
+    expect(localStates.last.posePhase, HandPosePhase.latched);
+    expect(localScroll.stops, greaterThan(stops));
+    for (final ms in [800, 900, 1000]) {
+      localCamera.emit(ms);
+      await tester.pump();
+    }
+    expect(localScroll.pages, [FlickDirection.down]);
+    await localController.dispose();
+  });
+
+  testWidgets('settings reset retains a watchdog for the running camera', (
+    tester,
+  ) async {
+    final localCamera = FakeCamera();
+    final localTracker = FakeTracker();
+    final localScroll = FakeScroll();
+    final localStates = <TrackingState>[];
+    final localController = TrackingController(
+      camera: localCamera,
+      tracker: localTracker,
+      scroll: localScroll,
+      motionDetector: WindowedMotionDetectionService(
+        const MotionDetectionConfig(),
+      ),
+      gestureMode: GestureMode.poseOnly,
+      config: const TrackingConfig(),
+      onState: localStates.add,
+    );
+    await localController.start();
+    localTracker.pose = handPoseFixture(RecognizedHandPose.pointingDown);
+    localCamera.emit(0);
+    await tester.pump();
+    expect(localStates.last.result, isNotNull);
+    await tester.pump(const Duration(milliseconds: 300));
+    localController.updateGestureSettings(mode: GestureMode.combined);
+    final stops = localScroll.stops;
+    await tester.pump(const Duration(milliseconds: 499));
+    expect(localStates.last.result, isNotNull);
+    await tester.pump(const Duration(milliseconds: 2));
+    expect(localStates.last.result, isNull);
+    expect(localStates.last.phase, TrackingPhase.lost);
+    expect(localStates.last.posePhase, HandPosePhase.ready);
+    expect(localStates.last.running, isTrue);
+    expect(localScroll.stops, greaterThan(stops));
+    await localController.dispose();
+  });
 
   for (final direction in [-1.0, 1.0]) {
     test(

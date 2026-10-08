@@ -290,6 +290,7 @@ void main() {
   }
 
   test('minimum displacement and velocity are independently required', () {
+    detector = FlickDetector(const FlickDetectionConfig(minimumVelocity: 0.8));
     for (final speed in [0.79, 0.81]) {
       detector.reset();
       final events = <FlickEvent>[];

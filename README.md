@@ -29,6 +29,10 @@ Android configuration is included: `minSdk = 24`, CAMERA permission, front-camer
    After a flick, let the hand settle before flicking again. Inversion also applies
    to flicks. Configured fixed-distance fast scrolling is available through
    `ScrollConfig.flickAction`.
+   Alternatively, point your index finger up/down with the other fingers curled
+   and hold for one page step. **Pose re-arm** selects **Open hand** (default:
+   release before pointing again) or **Hold same pose** (repeat after an adjustable
+   300–3000 ms dwell, then confirmation). **Pose only** disables competing motion/flick actions.
 4. Adjust **Sensitivity** (300–4000 pixels per normalized image height), or toggle **Invert scroll**. A setting change stops the old command until the next hand result.
 5. Toggle **Debug overlay** for all 21 landmarks, emphasized wrist/palm bases, yellow palm center, green neutral line, palm X/Y and inference latency. Disable it to reduce debug painting.
 6. **Stop tracking** stops scrolling and releases the camera/detector. Backgrounding suspends them; returning resumes only if tracking was requested. After permission denial, retry or enable Camera in Android app settings if Android no longer prompts.
@@ -43,10 +47,10 @@ Front camera (requested 30 FPS preview, medium resolution)
   -> MethodChannel -> Kotlin worker: sampled YUV420 -> RGB -> upright rotation
   -> official MediaPipe Hand Landmarker, CPU / VIDEO mode / one hand
   -> timestamped HandTrackingResult with 21 indexed xyz landmarks
-  -> raw palm flick detector + continuous/flick coordination
+  -> pose classifier + raw palm flick detector + gesture arbitration
   -> palm center -> EMA -> bounded timestamped regression window
   -> displacement/velocity thresholds + stationary/jump guards -> HandMotion
-  -> proportional velocity mapper -> display ticker -> Flutter ScrollController
+  -> proportional velocity ticker or shared page animation -> Flutter ScrollController
 ```
 
 Riverpod wires the existing feature-oriented services and publishes immutable tracking state. Widgets render state and forward controls/lifecycle events. The existing CameraService, HandTrackingService, MotionDetectionService and ScrollService boundaries remain; no new packages or architectural restructuring were needed. `ScrollVelocityMapper` isolates proportional mapping for camera-free testing. [docs/architecture.md](docs/architecture.md) documents ownership, channel data, coordinate conventions and extension boundaries.
@@ -93,6 +97,8 @@ Release shrinking rules preserve the protobuf/JNI/Flogger contracts required by 
 
 Flick detection, experimental defaults, action configuration, re-arming, and
 performance limits are documented in [docs/flick-gestures.md](docs/flick-gestures.md).
+One-shot pose recognition, open-hand release, arbitration and device validation
+are documented in [docs/hand-pose-scrolling.md](docs/hand-pose-scrolling.md).
 The native model and continuous-motion algorithm are preserved.
 
 - Palm X/Y averages wrist and four finger bases: indices 0, 5, 9, 13, 17. Fingertips do not control the position.

@@ -50,6 +50,7 @@ class FlickDetector {
   double? _stableY;
 
   bool get suppressesContinuous => _suppressed;
+  bool get ownsGesture => _held || _candidateStart != null;
 
   FlickEvent? process(HandTrackingResult result) {
     _suppressed = _held;

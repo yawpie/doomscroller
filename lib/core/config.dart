@@ -68,7 +68,7 @@ class MotionDetectionConfig {
 // Thresholds are experimental and should be tuned on the target phone.
 class FlickDetectionConfig {
   const FlickDetectionConfig({
-    this.minimumVelocity = 0.8,
+    this.minimumVelocity = 0.4,
     this.minimumDisplacement = 0.10,
     this.minimumDuration = const Duration(milliseconds: 80),
     this.maximumDuration = const Duration(milliseconds: 350),
@@ -134,4 +134,67 @@ class ScrollConfig {
   final FlickScrollAction flickAction;
   final double flickScrollDistance;
   final Duration flickDuration;
+}
+
+// Angles and palm-relative lengths are experimental target-device thresholds.
+enum HandPoseRearmMode { openHand, stablePose }
+
+class HandPoseDetectionConfig {
+  const HandPoseDetectionConfig({
+    this.enabled = true,
+    this.confirmationDuration = const Duration(milliseconds: 180),
+    this.releaseDuration = const Duration(milliseconds: 180),
+    this.cooldown = const Duration(milliseconds: 450),
+    this.rearmMode = HandPoseRearmMode.openHand,
+    this.stablePoseDuration = const Duration(milliseconds: 1000),
+    this.minimumObservations = 3,
+    this.minimumIndexAngle = 160,
+    this.maximumCurledAngle = 110,
+    this.minimumVerticalAlignment = 0.85,
+    this.exitIndexAngle = 150,
+    this.exitCurledAngle = 125,
+    this.exitVerticalAlignment = 0.70,
+    this.minimumFingerLengthRatio = 0.35,
+    this.minimumBoneLengthRatio = 0.03,
+    this.maximumSampleGap = const Duration(milliseconds: 250),
+  });
+
+  final bool enabled;
+  final Duration confirmationDuration;
+  final Duration releaseDuration;
+  final Duration cooldown;
+  final HandPoseRearmMode rearmMode;
+  final Duration stablePoseDuration;
+  final int minimumObservations;
+  final double minimumIndexAngle;
+  final double maximumCurledAngle;
+  final double minimumVerticalAlignment;
+  final double exitIndexAngle;
+  final double exitCurledAngle;
+  final double exitVerticalAlignment;
+  final double minimumFingerLengthRatio;
+  final double minimumBoneLengthRatio;
+  final Duration maximumSampleGap;
+
+  HandPoseDetectionConfig copyWith({
+    HandPoseRearmMode? rearmMode,
+    Duration? stablePoseDuration,
+  }) => HandPoseDetectionConfig(
+    enabled: enabled,
+    confirmationDuration: confirmationDuration,
+    releaseDuration: releaseDuration,
+    cooldown: cooldown,
+    rearmMode: rearmMode ?? this.rearmMode,
+    stablePoseDuration: stablePoseDuration ?? this.stablePoseDuration,
+    minimumObservations: minimumObservations,
+    minimumIndexAngle: minimumIndexAngle,
+    maximumCurledAngle: maximumCurledAngle,
+    minimumVerticalAlignment: minimumVerticalAlignment,
+    exitIndexAngle: exitIndexAngle,
+    exitCurledAngle: exitCurledAngle,
+    exitVerticalAlignment: exitVerticalAlignment,
+    minimumFingerLengthRatio: minimumFingerLengthRatio,
+    minimumBoneLengthRatio: minimumBoneLengthRatio,
+    maximumSampleGap: maximumSampleGap,
+  );
 }

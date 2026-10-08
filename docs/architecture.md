@@ -12,6 +12,16 @@ The four interfaces correspond to real substitution needs: fake cameras for test
 
 The coordinator owns camera/detector lifecycle. The Flutter scroll provider owns its ticker and `ScrollController`. Leaving the provider scope closes tracking, and native engine cleanup independently closes the channel worker. Camera and tracker disposal are reusable session shutdown operations, allowing a later initialize. Frame timestamps remain monotonic across camera sessions; the native detector resets its timestamp state when reinitialized.
 
+Gesture arbitration belongs to `GestureCoordinator`: active pose ownership,
+existing flick ownership, new pose candidates, then flick/continuous motion.
+`HandPoseClassifier` and `HandPoseDetector` use the existing landmark data;
+`RecognizedHandPose` names classifications separately from the `HandPose` data
+container. Pose config and combined/pose-only mode can change live through
+Riverpod listeners. Changes cancel actions, reset ownership and invalidate old
+inference results without restarting the camera. Pose/flick dispatch is mutually
+exclusive with continuous motion. See [hand-pose-scrolling.md](hand-pose-scrolling.md)
+for the state machine, thresholds and neutral-release semantics.
+
 Lifecycle commands are serialized. Stop/background requests invalidate in-flight results immediately and stop scrolling before asynchronous release. The coordinator stops the stream, disposes the camera, awaits the single in-flight inference, closes the detector, and clears motion history. Every resource gets a cleanup attempt even if another fails. A late initialization or inference cannot restart scrolling after stop. Foreground resume honors the previous tracking request; a manual stop or inference failure clears it.
 
 Permission is requested by the camera plugin at initialization. The UI does not ask on launch. Camera-access denial/restriction becomes an actionable error; a retry starts a new session. Inference and cleanup errors are surfaced without accumulating frames or continuing scrolling.
@@ -64,7 +74,7 @@ The release ProGuard rules preserve fields in protobuf-lite generated messages, 
 | Action | Meaning | Scroll effect |
 | --- | --- | --- |
 | start | First valid hand after reset, or UI session starts | Hold still during warmup |
-| idle | Insufficient samples, dead zone, stale timestamp, or unconfirmed direction | Stop |
+| idle | Insufficient samples, dead zone, stale timestamp, or unconfirmed direction | Stop continuous movement; preserve a discrete page animation |
 | moveUp | Confirmed negative upright-y velocity | Decrease scroll offset |
 | moveDown | Confirmed positive upright-y velocity | Increase scroll offset |
 | stop | Hand disappears after acquisition, or UI session stops | Stop |

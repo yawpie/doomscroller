@@ -5,7 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/providers.dart';
+import '../../../core/config.dart';
+import '../../gesture/application/gesture_coordinator.dart';
 import '../../gesture/domain/hand_motion.dart';
+import '../../gesture/domain/pose_event.dart';
 import 'hand_overlay.dart';
 
 class TrackingScreen extends ConsumerStatefulWidget {
@@ -47,7 +50,21 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
     final coordinator = ref.read(trackingProvider.notifier).controller;
     final camera = ref.watch(cameraServiceProvider).previewController;
     final scroll = ref.watch(flutterScrollServiceProvider);
+    final gestureMode = ref.watch(gestureModeProvider);
+    final poseConfig = ref.watch(handPoseConfigProvider);
     final pose = state.result?.pose;
+    final action =
+        state.lastPose != null &&
+            (state.posePhase == HandPosePhase.latched ||
+                state.posePhase == HandPosePhase.waitingRearm)
+        ? 'PAGE ${state.lastPose!.pose == RecognizedHandPose.pointingDown ? 'DOWN' : 'UP'}'
+        : state.flick != null
+        ? 'FLICK ${state.flick!.direction.name.toUpperCase()}'
+        : switch (state.motion.action) {
+            HandAction.moveUp => 'UP',
+            HandAction.moveDown => 'DOWN',
+            _ => 'IDLE',
+          };
     return Scaffold(
       appBar: AppBar(title: const Text('Hand Scroll Lab')),
       body: SafeArea(
@@ -122,12 +139,39 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
                                         'Tracking: ${state.phase.name.toUpperCase()}',
                                       ),
                                       Text(
-                                        'Action: ${state.flick != null ? 'FLICK ${state.flick!.direction.name.toUpperCase()}' : switch (state.motion.action) {
-                                                HandAction.moveUp => 'UP',
-                                                HandAction.moveDown => 'DOWN',
-                                                _ => 'IDLE',
-                                              }}',
+                                        'Hand pose: ${switch (state.currentPose) {
+                                          RecognizedHandPose.pointingUp => 'Pointing Up',
+                                          RecognizedHandPose.pointingDown => 'Pointing Down',
+                                          RecognizedHandPose.neutral => 'Open hand',
+                                          RecognizedHandPose.unknown => 'Unknown',
+                                        }}',
                                       ),
+                                      Text(
+                                        'Pose state: ${state.posePhase == HandPosePhase.waitingRearm ? 'WAITING_REARM' : state.posePhase.name.toUpperCase()}',
+                                      ),
+                                      if (state.posePhase ==
+                                          HandPosePhase.confirming)
+                                        Text(
+                                          'Confirming: ${(state.confirmationProgress * 100).round()}%',
+                                        ),
+                                      if (state.posePhase ==
+                                              HandPosePhase.latched ||
+                                          state.posePhase ==
+                                              HandPosePhase.waitingRearm)
+                                        Text(
+                                          poseConfig.rearmMode ==
+                                                  HandPoseRearmMode.stablePose
+                                              ? 'Re-arm: Hold same pose for ${poseConfig.stablePoseDuration.inMilliseconds} ms · cooldown ${state.cooldownRemaining.inMilliseconds} ms'
+                                              : state.posePhase ==
+                                                    HandPosePhase.latched
+                                              ? 'Re-arm: Show an open hand'
+                                              : 'Re-arm: Hold open hand · cooldown ${state.cooldownRemaining.inMilliseconds} ms',
+                                        ),
+                                      if (state.lastPose != null)
+                                        Text(
+                                          'Last pose action: Page ${state.lastPose!.pose == RecognizedHandPose.pointingDown ? 'Down' : 'Up'} at ${state.lastPose!.timestamp.inMilliseconds} ms',
+                                        ),
+                                      Text('Action: $action'),
                                       Text(
                                         'Hand velocity: ${state.motion.verticalVelocity.toStringAsFixed(3)} heights/s',
                                       ),
@@ -194,9 +238,10 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
                           min: scroll.config.minimumSensitivity,
                           max: scroll.config.maximumSensitivity,
                           label: scroll.mapper.sensitivity.toStringAsFixed(0),
-                          onChanged: (value) => setState(
-                            () => scroll.configure(sensitivity: value),
-                          ),
+                          onChanged: (value) => setState(() {
+                            scroll.configure(sensitivity: value);
+                            coordinator.updateGestureSettings();
+                          }),
                         ),
                         Wrap(
                           crossAxisAlignment: WrapCrossAlignment.center,
@@ -211,12 +256,72 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
                             const Text('Invert scroll'),
                             Switch(
                               value: scroll.mapper.inverted,
-                              onChanged: (value) => setState(
-                                () => scroll.configure(inverted: value),
-                              ),
+                              onChanged: (value) => setState(() {
+                                scroll.configure(inverted: value);
+                                coordinator.updateGestureSettings();
+                              }),
+                            ),
+                            const Text('Pose only'),
+                            Switch(
+                              value: gestureMode == GestureMode.poseOnly,
+                              onChanged: (value) => ref
+                                  .read(gestureModeProvider.notifier)
+                                  .setMode(
+                                    value
+                                        ? GestureMode.poseOnly
+                                        : GestureMode.combined,
+                                  ),
                             ),
                           ],
                         ),
+                        DropdownButtonFormField<HandPoseRearmMode>(
+                          isExpanded: true,
+                          key: ValueKey(poseConfig.rearmMode),
+                          initialValue: poseConfig.rearmMode,
+                          decoration: const InputDecoration(
+                            labelText: 'Pose re-arm',
+                          ),
+                          items: const [
+                            DropdownMenuItem(
+                              value: HandPoseRearmMode.openHand,
+                              child: Text('Open hand'),
+                            ),
+                            DropdownMenuItem(
+                              value: HandPoseRearmMode.stablePose,
+                              child: Text('Hold same pose'),
+                            ),
+                          ],
+                          onChanged: (value) {
+                            if (value != null) {
+                              ref
+                                  .read(handPoseConfigProvider.notifier)
+                                  .configureRearm(mode: value);
+                            }
+                          },
+                        ),
+                        if (poseConfig.rearmMode ==
+                            HandPoseRearmMode.stablePose) ...[
+                          Text(
+                            'Re-arm after: ${poseConfig.stablePoseDuration.inMilliseconds} ms',
+                          ),
+                          Slider(
+                            value: poseConfig.stablePoseDuration.inMilliseconds
+                                .toDouble()
+                                .clamp(300, 3000),
+                            min: 300,
+                            max: 3000,
+                            divisions: 27,
+                            label:
+                                '${poseConfig.stablePoseDuration.inMilliseconds} ms',
+                            onChanged: (value) => ref
+                                .read(handPoseConfigProvider.notifier)
+                                .configureRearm(
+                                  duration: Duration(
+                                    milliseconds: value.round(),
+                                  ),
+                                ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -229,8 +334,10 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen>
                   itemCount: 80,
                   itemBuilder: (context, index) => ListTile(
                     title: Text('Reading item ${index + 1}'),
-                    subtitle: const Text(
-                      'Move slowly to scroll; flick to move one page. Down goes ahead, up goes back.',
+                    subtitle: Text(
+                      poseConfig.rearmMode == HandPoseRearmMode.openHand
+                          ? 'Point up/down to move one page. Open your hand before pointing again. Slow movement and flicks work in combined mode.'
+                          : 'Point up/down to move one page. Hold the same pose for ${poseConfig.stablePoseDuration.inMilliseconds} ms to re-arm and repeat. Slow movement and flicks work in combined mode.',
                     ),
                   ),
                 ),
