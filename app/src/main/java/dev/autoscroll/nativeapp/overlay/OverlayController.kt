@@ -1,6 +1,7 @@
 package dev.autoscroll.nativeapp.overlay
 
 import android.content.Context
+import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Rect
@@ -21,12 +22,9 @@ import kotlin.math.abs
 /** Small native view owned by the service; no Activity or Compose lifecycle. */
 class OverlayController(
     private val context: Context,
-    private val onActivate: () -> Unit,
     private val onPause: () -> Unit,
     private val onStop: () -> Unit,
-    private val onSettings: () -> Unit,
-    private val onForward: () -> Unit,
-    private val onBackward: () -> Unit,
+    private val onOpenApp: () -> Unit,
     private val onInteraction: (Boolean) -> Unit,
 ) : AutoCloseable {
     private val windows = context.getSystemService(WindowManager::class.java)
@@ -34,22 +32,22 @@ class OverlayController(
     private val root = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
         setPadding(dp(8), dp(8), dp(8), dp(8))
-        background = GradientDrawable().apply { setColor(Color.rgb(238, 246, 232)); cornerRadius = dp(24).toFloat() }
+        val dark = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+        background = GradientDrawable().apply { setColor(if (dark) Color.rgb(33, 37, 31) else Color.rgb(238, 246, 232)); cornerRadius = dp(24).toFloat() }
         elevation = dp(6).toFloat()
     }
     private val bubble = TextView(context).apply {
         textSize = 18f
-        setTextColor(Color.rgb(28, 64, 20))
+        val dark = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+        setTextColor(if (dark) Color.rgb(200, 230, 180) else Color.rgb(28, 64, 20))
         gravity = Gravity.CENTER
         minWidth = dp(48); minHeight = dp(48)
         isClickable = true
-        contentDescription = "Hand Scroll status. Tap to expand, drag to move."
+        contentDescription = "Scroll Vision status. Tap to expand, drag to move."
     }
     private val controls = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-    private val activate = button("Start / Resume", onActivate)
     private val pause = button("Pause", onPause)
-    private val forward = button("Test forward", onForward)
-    private val backward = button("Test backward", onBackward)
+    private val openApp = button("Open app to resume", onOpenApp)
     @Suppress("DEPRECATION")
     private val params = WindowManager.LayoutParams(
         WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
@@ -65,9 +63,8 @@ class OverlayController(
 
     init {
         root.addView(bubble)
-        controls.addView(activate); controls.addView(pause)
-        controls.addView(button("Stop", onStop)); controls.addView(button("Settings", onSettings))
-        controls.addView(forward); controls.addView(backward)
+        controls.addView(pause)
+        controls.addView(button("Stop", onStop)); controls.addView(openApp)
         root.addView(controls)
         controls.visibility = View.GONE
         bubble.setOnClickListener {
@@ -106,6 +103,11 @@ class OverlayController(
     private fun dp(value: Int) = (value * context.resources.displayMetrics.density).toInt()
     private fun button(label: String, action: () -> Unit) = Button(context).apply {
         text = label
+        minWidth = dp(48); minHeight = dp(48)
+        isAllCaps = false
+        setSingleLine(false)
+        maxWidth = (context.resources.displayMetrics.widthPixels - dp(32)).coerceAtLeast(dp(48))
+        contentDescription = label
         setOnTouchListener { _, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> onInteraction(true)
@@ -141,10 +143,9 @@ class OverlayController(
             is GestureSessionState.Error -> "! Error"
         }
         bubble.contentDescription = "${bubble.text}. Tap to expand, drag to move."
-        activate.isEnabled = state != GestureSessionState.Active && state != GestureSessionState.Starting
+        openApp.text = if (state == GestureSessionState.Active || state == GestureSessionState.Starting) "Open app" else "Open app to resume"
+        openApp.contentDescription = openApp.text
         pause.isEnabled = state == GestureSessionState.Active || state == GestureSessionState.Starting
-        forward.isEnabled = state == GestureSessionState.Active
-        backward.isEnabled = state == GestureSessionState.Active
         root.post { reposition() }
     }
 
@@ -162,6 +163,9 @@ class OverlayController(
         }
         params.x = params.x.coerceIn(0, (size.first - root.width).coerceAtLeast(0))
         params.y = params.y.coerceIn(0, (size.second - root.height).coerceAtLeast(0))
+        for (index in 0 until controls.childCount) {
+            (controls.getChildAt(index) as TextView).maxWidth = (size.first - dp(32)).coerceAtLeast(dp(48))
+        }
         windows.updateViewLayout(root, params)
     }
 

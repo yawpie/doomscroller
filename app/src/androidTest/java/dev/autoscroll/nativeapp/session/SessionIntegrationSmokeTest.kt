@@ -90,7 +90,7 @@ class SessionIntegrationSmokeTest {
         assumeTrue("A user-owned session is already running", app.session.machine.state == GestureSessionState.Stopped)
         instrumentation.runOnMainSync {
             val before = WindowInspector.getGlobalWindowViews().size
-            val overlay = OverlayController(context, {}, {}, {}, {}, {}, {}, {})
+        val overlay = OverlayController(context, {}, {}, {}, {})
             try {
                 overlay.show()
                 overlay.show()

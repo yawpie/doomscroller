@@ -92,10 +92,10 @@ class GestureCameraService : LifecycleService() {
     }
 
     private fun prerequisites(): String? = when {
-        !store.activityVisible -> "Open Hand Scroll and press Start or Resume to activate the camera."
+        !store.activityVisible -> "Open Scroll Vision and press Start or Resume to activate the camera."
         ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED -> "Camera permission is required."
         !app.settings.accessibilityConsent -> "Confirm the accessibility disclosure first."
-        !adapter.isReady -> "Enable Hand Scroll in Android accessibility settings."
+        !adapter.isReady -> "Enable Scroll Vision gestures in Android accessibility settings."
         app.settings.state.value.overlayEnabled && !Settings.canDrawOverlays(this) -> "Allow the floating widget, or disable it in the app."
         else -> null
     }
@@ -180,10 +180,7 @@ class GestureCameraService : LifecycleService() {
     private fun createOverlay() {
         if (overlay != null) return
         overlay = OverlayController(this,
-            onActivate = { openActivity() }, onPause = ::pauseSession, onStop = ::stopSession,
-            onSettings = { openActivity() },
-            onForward = { requestManual(ScrollAction.FORWARD) },
-            onBackward = { requestManual(ScrollAction.BACKWARD) },
+            onPause = ::pauseSession, onStop = ::stopSession, onOpenApp = { openActivity() },
             onInteraction = { pressed ->
                 overlayInteracting = pressed
                 adapter.suspendForInteraction()
@@ -289,7 +286,7 @@ class GestureCameraService : LifecycleService() {
             is GestureSessionState.Error -> state.reason
         }
         val builder = Notification.Builder(this, CHANNEL).setSmallIcon(android.R.drawable.ic_menu_camera)
-            .setContentTitle("Hand Scroll Native").setContentText(text).setContentIntent(activity)
+            .setContentTitle("Scroll Vision").setContentText(text).setContentIntent(activity)
             .setOnlyAlertOnce(true).setOngoing(true)
         if (machine.state == GestureSessionState.Active || machine.state == GestureSessionState.Starting)
             builder.addAction(Notification.Action.Builder(null, "Pause", command(ACTION_PAUSE, 1)).build())

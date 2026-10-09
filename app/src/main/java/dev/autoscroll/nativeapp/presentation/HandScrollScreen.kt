@@ -1,5 +1,6 @@
 package dev.autoscroll.nativeapp.presentation
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -7,25 +8,39 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import dev.autoscroll.nativeapp.gesture.GestureMode
 import dev.autoscroll.nativeapp.scrolling.ScrollAction
 import dev.autoscroll.nativeapp.session.GestureSessionState
 import dev.autoscroll.nativeapp.session.SessionDiagnostics
 import dev.autoscroll.nativeapp.settings.NativeSettings
-import java.util.Locale
 
 @Composable
 internal fun HandScrollScreen(
     state: GestureSessionState,
     settings: NativeSettings,
+    draft: NativeSettings,
+    onDraftChange: (NativeSettings) -> Unit,
     diagnostics: SessionDiagnostics,
     accessibility: Boolean,
     consent: Boolean,
     cameraGranted: Boolean,
+    cameraBlocked: Boolean,
+    cameraExplanation: String?,
     overlayGranted: Boolean,
     notificationRequired: Boolean,
     manualRunning: Boolean,
     manualResult: String,
+    permissionError: String?,
     onCameraPermission: () -> Unit,
     onOverlayPermission: () -> Unit,
     onNotificationPermission: () -> Unit,
@@ -35,103 +50,163 @@ internal fun HandScrollScreen(
     onStop: () -> Unit,
     onSettingsChange: (NativeSettings) -> Unit,
     onTestAction: (ScrollAction) -> Unit,
+    onPractice: (() -> Unit)? = null,
 ) {
-    var page by rememberSaveable { mutableStateOf("Dashboard") }
-    var disclosure by remember { mutableStateOf(false) }
-    val canEdit = state != GestureSessionState.Starting
-    val prerequisites = cameraGranted && accessibility && consent && (!settings.overlayEnabled || overlayGranted)
+    var page by rememberSaveable { mutableStateOf("Home") }
+    var disclosure by rememberSaveable { mutableStateOf(false) }
+    var showSetup by rememberSaveable { mutableStateOf(false) }
+    var advanced by rememberSaveable { mutableStateOf(false) }
+    var applyMessage by remember { mutableStateOf<String?>(null) }
+    val ready = readyToStart(cameraGranted, accessibility, consent, settings.overlayEnabled, overlayGranted)
+    val dirty = draft != settings
     Surface(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-            Text("Hand Scroll Native", style = MaterialTheme.typography.headlineSmall,
-                modifier = Modifier.padding(16.dp))
-            PrimaryScrollableTabRow(selectedTabIndex = listOf("Dashboard", "Settings", "Diagnostics", "Help").indexOf(page)) {
-                listOf("Dashboard", "Settings", "Diagnostics", "Help").forEach { title ->
-                    Tab(selected = page == title, onClick = { page = title }, text = { Text(title) })
+            Text("Scroll Vision", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(16.dp))
+            PrimaryScrollableTabRow(selectedTabIndex = listOf("Home", "Gestures", "Settings").indexOf(page), edgePadding = 0.dp) {
+                listOf("Home", "Gestures", "Settings").forEach { title ->
+                    Tab(selected = page == title, onClick = { page = title }, text = { Text(title, maxLines = 1) })
                 }
             }
-            Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            // Each tab keeps its own scroll position; switching tabs never applies the settings draft.
+            val homeScroll = rememberScrollState()
+            val gesturesScroll = rememberScrollState()
+            val settingsScroll = rememberScrollState()
+            Column(Modifier.weight(1f).verticalScroll(when (page) {
+                "Home" -> homeScroll
+                "Gestures" -> gesturesScroll
+                else -> settingsScroll
+            }).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 when (page) {
-                    "Dashboard" -> {
-                        Text(status(state), style = MaterialTheme.typography.titleLarge)
-                        if (state is GestureSessionState.Error) Text(state.reason,
-                            color = MaterialTheme.colorScheme.error)
-                        Text("Camera permission: ${if (cameraGranted) "allowed" else "needed"}")
-                        Text("Accessibility: ${if (accessibility) "connected" else "not enabled"}")
-                        Text("Floating widget: ${if (!settings.overlayEnabled) "disabled" else if (overlayGranted) "allowed" else "permission needed"}")
-                        Text("Mode: ${settings.mode.name}")
-                        if (!cameraGranted) Button(onClick = { onCameraPermission() }) { Text("Allow camera") }
-                        Text("Camera: your front camera detects your hand on this device. Images are not recorded or sent to a server.")
-                        if (settings.overlayEnabled && !overlayGranted) Button(onClick = {
-                            onOverlayPermission()
-                        }) { Text("Allow floating widget") }
-                        Text("Floating widget: lets you pause, resume, stop, and move the controls over another app. It is optional.")
-                        Button(onClick = { disclosure = true }) { Text(if (accessibility) "Accessibility disclosure / settings" else "Set up accessibility") }
-                        Text("Accessibility: performs the vertical swipes, single taps, and double taps you request. Screen contents and input text are not read. You enable it yourself in Android Settings.")
-                        if (notificationRequired)
-                            OutlinedButton(onClick = { onNotificationPermission() }) { Text("Allow session notifications") }
-                        Text("A session notification provides Pause and Stop. Android also shows camera use. Notification permission is recommended; denial does not prevent the foreground service.")
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(enabled = prerequisites && state != GestureSessionState.Active && state != GestureSessionState.Starting,
-                                onClick = onStart) { Text(if (state == GestureSessionState.Paused) "Resume" else "Start") }
-                            OutlinedButton(enabled = state == GestureSessionState.Active || state == GestureSessionState.Starting,
-                                onClick = onPause) { Text("Pause") }
-                            OutlinedButton(enabled = state != GestureSessionState.Stopped, onClick = onStop) { Text("Stop") }
+                    "Home" -> {
+                        ElevatedCard(Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(status(state), style = MaterialTheme.typography.titleLarge)
+                                Text(if (ready) "Ready to use" else "Finish the required setup below")
+                                if (state is GestureSessionState.Error) Text(state.reason, color = MaterialTheme.colorScheme.error)
+                                Button(onClick = { if (state == GestureSessionState.Active) onPause() else onStart() },
+                                    enabled = state != GestureSessionState.Starting && (state == GestureSessionState.Active || ready),
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
+                                    Text(when (state) {
+                                        GestureSessionState.Active -> "Pause tracking"
+                                        GestureSessionState.Paused -> "Resume tracking"
+                                        GestureSessionState.Starting -> "Starting…"
+                                        else -> "Start tracking"
+                                    })
+                                }
+                                TextButton(onClick = onStop, enabled = state != GestureSessionState.Stopped,
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Stop") }
+                                Text(if (state == GestureSessionState.Active) "Switch to your feed when ready. Pause releases the camera."
+                                    else "Start or Resume here before switching to your feed. All hand tracking stays on this device.",
+                                    style = MaterialTheme.typography.bodyMedium)
+                            }
                         }
-                        Text("Wait for Active, then switch to your feed. In HYBRID or POSE mode: point down/up to navigate, show an open hand for one pause tap, or a thumbs-up for a double tap. Navigation and thumbs-up repeat after the rearm delay and fresh confirmation. No open or closed hand is needed to rearm.")
-                        HorizontalDivider()
-                        Text("Test an external screen action", style = MaterialTheme.typography.titleMedium)
-                        Text("Open a feed app first, return here, then tap a test. Hand Scroll moves to the background and sends the action after one second. Taps land at the center of the screen. Camera stays off.")
-                        val canTest = accessibility && consent && state == GestureSessionState.Stopped
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(enabled = canTest && !manualRunning,
-                                onClick = { onTestAction(ScrollAction.FORWARD) }) { Text("Swipe forward") }
-                            OutlinedButton(enabled = canTest && !manualRunning,
-                                onClick = { onTestAction(ScrollAction.BACKWARD) }) { Text("Swipe backward") }
+                        OutlinedCard(Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("Quick gesture guide", style = MaterialTheme.typography.titleMedium)
+                                Text(compactGuide(settings))
+                                TextButton(onClick = { page = "Gestures" }, modifier = Modifier.heightIn(min = 48.dp)) { Text("See gesture cards") }
+                            }
                         }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(enabled = canTest && !manualRunning,
-                                onClick = { onTestAction(ScrollAction.SINGLE_TAP) }) { Text("Single tap") }
-                            OutlinedButton(enabled = canTest && !manualRunning,
-                                onClick = { onTestAction(ScrollAction.DOUBLE_TAP) }) { Text("Double tap") }
+                        if (!ready || showSetup) {
+                            Text("Permission checklist", style = MaterialTheme.typography.titleLarge)
+                            Text("Complete camera and accessibility access. Floating controls and notifications are optional.")
+                            if (permissionError != null) Text(permissionError, color = MaterialTheme.colorScheme.error)
+                            SetupStep("1 · Camera", cameraGranted,
+                                "Your front camera detects your hand. Images are processed on your device, never recorded or sent to a server.") {
+                                if (!cameraGranted) {
+                                    if (cameraExplanation != null) Text(cameraExplanation)
+                                    Button(onClick = onCameraPermission, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                                        Text(if (cameraBlocked) "Open camera settings" else "Allow camera")
+                                    }
+                                }
+                            }
+                            SetupStep("2 · Accessibility", accessibility && consent,
+                                "Sends the swipes and taps you request. Screen content, typed text and passwords are not read.") {
+                                if (!accessibility || !consent) Text("Read and agree to the disclosure, then enable Scroll Vision gestures in Android Settings. If Android restricts access, open App info and review its restricted settings option.")
+                                OutlinedButton(onClick = { disclosure = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                                    Text(if (accessibility && consent) "Review access" else "Review and enable accessibility")
+                                }
+                            }
+                            SetupStep("3 · Floating controls · optional", !settings.overlayEnabled || overlayGranted,
+                                if (!settings.overlayEnabled) "Skipped. You can enable these later in Settings."
+                                else "Pause or Stop over your feed. Open the app to Resume. You can drag the status bubble.") {
+                                if (settings.overlayEnabled && !overlayGranted) {
+                                    OutlinedButton(onClick = onOverlayPermission, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Allow floating controls") }
+                                    TextButton(onClick = {
+                                        onDraftChange(draft.copy(overlayEnabled = false))
+                                        onSettingsChange(settings.copy(overlayEnabled = false))
+                                    }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Skip floating controls") }
+                                }
+                            }
+                            SetupStep("4 · Notifications · optional", !notificationRequired,
+                                "A session notice offers Pause and Stop. Android shows camera use. Denying notifications does not block tracking.") {
+                                if (notificationRequired) OutlinedButton(onClick = onNotificationPermission,
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Allow notifications") }
+                            }
                         }
-                        Text(manualResult)
+                        TextButton(onClick = { showSetup = !showSetup }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                            Text(if (showSetup && ready) "Hide setup checklist" else "Review setup checklist")
+                        }
                     }
-                    "Settings" -> {
-                        Text("Changing a setting pauses an active session. Resume from this screen's Dashboard when ready.")
-                        SettingsPanel(settings, canEdit, onSettingsChange)
-                    }
-                    "Diagnostics" -> {
-                        val metrics = diagnostics.metrics
-                        Text(status(state), style = MaterialTheme.typography.titleLarge)
-                        Text("MediaPipe: ${if (metrics.processedFrames > 0) "initialized / completed inference" else "waiting for session"}")
-                        Text("Hand: ${if (diagnostics.handDetected) "detected" else "not detected"}")
-                        Text("Pose: ${diagnostics.pose} · ${diagnostics.posePhase}")
-                        Text("Last pose: ${diagnostics.lastPose} · flick: ${diagnostics.lastFlick}")
-                        Text("Delivered camera FPS: ${decimal(metrics.cameraFps)}")
-                        Text("Inference FPS: ${decimal(metrics.inferenceFps)}")
-                        Text("Last inference + conversion: ${decimal(metrics.inferenceMilliseconds)} ms")
-                        Text("Recent ${metrics.inferenceSamples} frames: average ${decimal(metrics.inferenceAverageMilliseconds)} ms · P50 ${decimal(metrics.inferenceP50Milliseconds)} ms · P95 ${decimal(metrics.inferenceP95Milliseconds)} ms")
-                        Text("Completed: ${metrics.processedFrames} · rate skipped: ${metrics.throttledFrames} · stale: ${metrics.staleFrames}")
-                        Text("Tracking losses: ${diagnostics.trackingLossCount}")
-                        Text("Last action: ${diagnostics.lastAction}")
-                        Text("Frame callback to dispatch: ${diagnostics.gestureToActionMs?.let { "$it ms" } ?: "not measured"}")
-                        Text("Last rejection: ${diagnostics.rejectionReason ?: "None"}")
-                        Text("CameraX's internal frame drops are not exposed. Action completion means Android completed dispatch; check the feed to confirm its response.")
+                    "Gestures" -> {
+                        Text("Learn your gestures", style = MaterialTheme.typography.titleLarge)
+                        Text("Current mode: ${modeLabel(settings.mode)}${if (settings.inverted) " · direction reversed" else ""}. Keep your whole hand visible and well lit.")
+                        if (onPractice != null) Button(onClick = onPractice, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text("Practice safely") }
+                        if (settings.mode == GestureMode.HYBRID || settings.mode == GestureMode.POSE) {
+                            GestureCard(if (settings.inverted) "Previous item" else "Next item", HandDrawing.DOWN,
+                                "Point your index finger down. Curl the other fingers.", "Holding this pose can repeat after the rearm delay and fresh confirmation.")
+                            GestureCard(if (settings.inverted) "Next item" else "Previous item", HandDrawing.UP,
+                                "Point your index finger up. Curl the other fingers.", "Holding this pose can repeat after the rearm delay and fresh confirmation.")
+                            GestureCard("Tap video", HandDrawing.OPEN,
+                                "Show an open hand for one tap at the center of your feed. This may toggle play or pause, depending on the app.",
+                                "Tracking stays on. Holding your hand open sends no extra taps and blocks movement gestures. Show a different visible pose before another open-hand tap; losing tracking alone does not rearm it.")
+                            GestureCard("Double tap", HandDrawing.THUMB,
+                                "Show a thumbs-up with the other four fingers curled. Sends two center taps; the result depends on your feed.",
+                                "Holding thumbs-up can repeat after the rearm delay and fresh confirmation.")
+                        }
+                        if (settings.mode == GestureMode.HYBRID || settings.mode == GestureMode.FLICK) {
+                            GestureCard("Flick to navigate", HandDrawing.FLICK,
+                                "Move your palm quickly down or up to ${if (settings.inverted) "go back or forward" else "go forward or back"}. In Hybrid, curl your fingers and keep your thumb relaxed to avoid a pose tap.",
+                                "Settle your hand before the next flick; cooldown and rearm prevent immediate repeats.")
+                        }
+                        if (settings.mode == GestureMode.HYBRID || settings.mode == GestureMode.CONTINUOUS) {
+                            GestureCard("Move to scroll", HandDrawing.MOVEMENT,
+                                "Move your palm vertically for continuous scrolling. Direction follows hand movement${if (settings.inverted) " with reversal enabled" else ""}. In Hybrid, curl your fingers and keep your thumb relaxed to avoid a pose tap.",
+                                "Hold still to stop scrolling. In Hybrid mode, poses and flicks take priority.")
+                        }
+                        Card(Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("Pause tracking", style = MaterialTheme.typography.titleMedium)
+                                Text("Press Pause tracking on Home, or Pause in the floating controls or notification. It releases the camera and stops gesture actions. Open Home and press Resume tracking to continue.")
+                                Text("Tap video and Pause tracking do different things. The open-hand gesture taps your feed; it does not turn tracking off.")
+                            }
+                        }
+                        Text("Pause before sensitive interactions: gesture actions can interrupt a finger touch. System settings, permission screens, launcher and Scroll Vision are blocked targets. Screen lock pauses tracking; process restart stays stopped.", style = MaterialTheme.typography.bodyMedium)
                     }
                     else -> {
-                        Text("Getting started", style = MaterialTheme.typography.titleLarge)
-                        Text("1. Allow camera. Optionally allow the floating widget. Read the accessibility disclosure and enable Hand Scroll in Android Settings.")
-                        Text("2. Test swipes and taps with the camera stopped.")
-                        Text("3. Start on the Dashboard and wait for Active. Switch to TikTok, Reels, Shorts, or another vertically scrolling app.")
-                        Text("4. In HYBRID or POSE mode, point with the index finger and curl the others to navigate. A thumbs-up with the four other fingers curled sends a double tap. Rearm uses only elapsed time; adjust Rearm delay in Settings. After the delay each action needs fresh confirmation, even if you keep holding the pose.")
-                        Text("Open hand is only a pause tap, never a rearm signal. Holding it sends one center tap and blocks movement gestures. Show another visible pose before another open-hand tap; tracking loss alone cannot repeat the tap.")
-                        Text("A single tap toggles pause/play only in feeds that support center tapping. Double-tap behavior depends on the target app. Flicks use fast vertical palm motion. CONTINUOUS and FLICK modes keep their existing movement controls without pose taps.")
-                        Text("Tap the status bubble to expand or collapse, and drag it to move it. Pause releases the camera. Resume opens this app, where you press Resume. Stop removes the widget and notification.")
-                        Text("Locking the screen pauses the session. After a process restart the session is stopped. Camera privacy controls, another camera app, battery restrictions, and device software may interrupt capture.")
-                        Text("Keep the hand well lit and fully visible. Thresholds are experimental and need calibration on your phone. A dispatched action may be ignored by an app, and very small continuous swipes may not exceed its touch threshold.")
-                        Text("Accessibility actions can interrupt a finger touch already in progress. Stop or pause before sensitive interactions. System settings, permission screens, the launcher, and Hand Scroll itself are blocked targets.")
-                        Text("All inference stays on this device. No accounts, ads, analytics, server, or video recording. Diagnostics here are in memory and clear on process restart.")
+                        Text(if (advanced) "Advanced" else "Settings", style = MaterialTheme.typography.titleLarge)
+                        Text("Edit a draft, then apply once. Your changes stay in the draft until you apply or discard them.")
+                        Text(if (settingsChangePauses(state, settings, draft)) "Applying changes pauses tracking and releases the camera. Return to Home and press Resume tracking."
+                            else "Applying while tracking is active or starting will pause it. Resume from Home when ready.")
+                        Button(onClick = {
+                            val pauses = settingsChangePauses(state, settings, draft)
+                            onSettingsChange(draft)
+                            applyMessage = if (pauses) "Changes applied. Tracking is paused; return to Home and press Resume tracking." else "Changes applied."
+                        }, enabled = dirty, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Apply changes") }
+                        OutlinedButton(onClick = { onDraftChange(settings); applyMessage = "Draft discarded." }, enabled = dirty,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Discard changes") }
+                        Text(if (dirty) "Unsaved changes" else applyMessage ?: "All changes saved")
+                        if (advanced) {
+                            TextButton(onClick = { advanced = false }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Back to everyday settings") }
+                            AdvancedSettingsPanel(draft, state, diagnostics,
+                                canTest = accessibility && consent && state == GestureSessionState.Stopped,
+                                manualRunning = manualRunning, manualResult = manualResult,
+                                update = { onDraftChange(it); applyMessage = null }, test = onTestAction)
+                        } else {
+                            SettingsPanel(draft) { onDraftChange(it); applyMessage = null }
+                            OutlinedButton(onClick = { advanced = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Advanced") }
+                            Text("Recognition tuning, camera settings, diagnostics and external action tests.", style = MaterialTheme.typography.bodyMedium)
+                        }
                     }
                 }
             }
@@ -140,21 +215,118 @@ internal fun HandScrollScreen(
     if (disclosure) AlertDialog(
         onDismissRequest = { disclosure = false },
         title = { Text("Allow gesture controlled screen actions") },
-        text = { Text("Hand Scroll uses Android Accessibility to send vertical swipes, center single taps, and center double taps requested by your hand gestures or test buttons in other apps. It receives only the current app's package name to block unsafe targets. It does not read screen content, text, or passwords. Actions may interrupt an ongoing touch. You can pause, stop, or disable the service in Android Settings at any time.") },
-        confirmButton = { TextButton(onClick = {
-            disclosure = false
-            onAccessibilityConsent()
-        }) { Text("I agree · open Settings") } },
-        dismissButton = { TextButton(onClick = { disclosure = false }) { Text("Cancel") } },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text("Scroll Vision uses Android Accessibility to send vertical swipes, center single taps, and center double taps requested by your hand gestures or external test buttons in other apps. It receives only the current app's package name to block unsafe targets. It does not read screen content, text, or passwords. Actions may interrupt an ongoing touch. You can pause, stop, or disable the service in Android Settings at any time.")
+            }
+        },
+        confirmButton = { TextButton(onClick = { disclosure = false; onAccessibilityConsent() },
+            modifier = Modifier.heightIn(min = 48.dp)) { Text("I agree · open Settings") } },
+        dismissButton = { TextButton(onClick = { disclosure = false }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Cancel") } },
     )
 }
 
-private fun status(state: GestureSessionState) = when (state) {
+@Composable
+private fun SetupStep(title: String, complete: Boolean, explanation: String, content: @Composable ColumnScope.() -> Unit) {
+    OutlinedCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(if (complete) "Complete" else if (title.contains("optional")) "Your choice" else "Required · not ready")
+            Text(explanation)
+            content()
+        }
+    }
+}
+
+@Composable
+private fun GestureCard(title: String, drawing: HandDrawing, instruction: String, repeat: String) {
+    OutlinedCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            HandIllustration(drawing)
+            Text(title, style = MaterialTheme.typography.titleLarge)
+            Text(instruction)
+            Text(repeat, style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
+
+private enum class HandDrawing { UP, DOWN, OPEN, THUMB, FLICK, MOVEMENT }
+
+@Composable
+private fun HandIllustration(drawing: HandDrawing) {
+    val fill = MaterialTheme.colorScheme.primaryContainer
+    val ink = MaterialTheme.colorScheme.onPrimaryContainer
+    Canvas(Modifier.fillMaxWidth().height(144.dp).semantics {
+        contentDescription = when (drawing) {
+            HandDrawing.UP -> "Hand illustration: index finger pointing up, other fingers curled"
+            HandDrawing.DOWN -> "Hand illustration: index finger pointing down, other fingers curled"
+            HandDrawing.THUMB -> "Hand illustration: thumbs-up, four fingers curled"
+            HandDrawing.OPEN -> "Hand illustration: open palm"
+            else -> "Hand illustration: curled fingers, relaxed thumb, vertical movement arrows"
+        }
+    }) {
+        val factor = size.height / 140f
+        scale(factor, factor, pivot = center) {
+            rotate(if (drawing == HandDrawing.DOWN) 180f else 0f, pivot = center) {
+                val left = center.x - 32f
+                val top = center.y - 5f
+                fun finger(x: Float, y: Float, width: Float, height: Float) {
+                    drawRoundRect(fill, Offset(x, y), Size(width, height), CornerRadius(8f))
+                    drawRoundRect(ink, Offset(x, y), Size(width, height), CornerRadius(8f), style = Stroke(2f))
+                }
+                finger(left + 12f, top + 42f, 38f, 22f)
+                finger(left, top, 66f, 48f)
+                when (drawing) {
+                    HandDrawing.UP, HandDrawing.DOWN -> {
+                        finger(left + 2f, top - 54f, 14f, 65f)
+                        for (i in 1..3) finger(left + i * 15f, top - 8f, 13f, 26f)
+                        finger(left - 10f, top + 14f, 22f, 15f)
+                    }
+                    HandDrawing.THUMB -> {
+                        finger(left - 14f, top - 44f, 16f, 63f)
+                        for (i in 0..3) finger(left + i * 15f, top - 8f, 14f, 30f)
+                    }
+                    HandDrawing.FLICK, HandDrawing.MOVEMENT -> {
+                        for (i in 0..3) finger(left + i * 15f, top - 8f, 14f, 30f)
+                        finger(left - 8f, top + 18f, 22f, 14f)
+                    }
+                    else -> {
+                        for (i in 0..3) finger(left + i * 17f, top - (42f + if (i == 1) 12f else if (i == 3) -6f else 0f), 14f,
+                            55f + if (i == 1) 12f else if (i == 3) -6f else 0f)
+                        rotate(-38f, Offset(left, top + 30f)) { finger(left - 14f, top - 4f, 17f, 45f) }
+                    }
+                }
+            }
+            if (drawing == HandDrawing.FLICK || drawing == HandDrawing.MOVEMENT) {
+                val x = center.x + 60f
+                drawLine(ink, Offset(x, center.y - 46f), Offset(x, center.y + 42f), 4f, StrokeCap.Round)
+                drawLine(ink, Offset(x, center.y + 42f), Offset(x - 10f, center.y + 30f), 4f, StrokeCap.Round)
+                drawLine(ink, Offset(x, center.y + 42f), Offset(x + 10f, center.y + 30f), 4f, StrokeCap.Round)
+                drawLine(ink, Offset(x, center.y - 46f), Offset(x - 10f, center.y - 34f), 4f, StrokeCap.Round)
+                drawLine(ink, Offset(x, center.y - 46f), Offset(x + 10f, center.y - 34f), 4f, StrokeCap.Round)
+            }
+        }
+    }
+}
+
+private fun compactGuide(settings: NativeSettings) = when (settings.mode) {
+    GestureMode.POSE -> "Point down/up to navigate. Open hand: tap video once. Thumbs-up: double tap. Pointing and thumbs-up can repeat."
+    GestureMode.HYBRID -> "Point down/up or flick to navigate; move your palm to scroll. Open hand: tap video once. Thumbs-up: double tap."
+    GestureMode.FLICK -> "Flick your palm down/up to navigate. Settle your hand before repeating. Pose taps are off in this mode."
+    GestureMode.CONTINUOUS -> "Move your palm vertically to scroll. Hold still to stop scrolling. Pose taps are off in this mode."
+} + if (settings.inverted) " Scroll direction is reversed." else ""
+
+private fun modeLabel(mode: GestureMode) = when (mode) {
+    GestureMode.HYBRID -> "Hybrid · poses and movement"
+    GestureMode.POSE -> "Poses only"
+    GestureMode.FLICK -> "Flicks only"
+    GestureMode.CONTINUOUS -> "Continuous movement only"
+}
+
+internal fun status(state: GestureSessionState) = when (state) {
     GestureSessionState.Stopped -> "Stopped · camera off"
     GestureSessionState.Starting -> "Starting camera…"
-    GestureSessionState.Active -> "Active · camera on"
+    GestureSessionState.Active -> "Tracking · camera on"
     GestureSessionState.Paused -> "Paused · camera off"
-    is GestureSessionState.Error -> "Session error · camera off"
+    is GestureSessionState.Error -> "Needs attention · camera off"
 }
-private fun decimal(value: Double) = String.format(Locale.US, "%.1f", value)
-

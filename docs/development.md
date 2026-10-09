@@ -20,7 +20,7 @@ wrapper and pinned dependencies, not a system Gradle installation.
 
 The app already needs a service-owned state holder: an Activity/ViewModel cannot
 own a camera session that continues over another app. Manual constructor injection
-and the application container are sufficient for the current single-screen app.
+and the application container are sufficient for the current app.
 Do not add a DI framework, use-case wrapper, or module per package without a real
 ownership or reuse need. These boundaries follow Android's
 [architecture recommendations](https://developer.android.com/topic/architecture/recommendations).
@@ -53,8 +53,12 @@ need the [device validation matrix](device-validation.md).
 
 Keep [saved parity fixtures](../parity-fixtures/README.md) unchanged during
 refactors. Add native cases for intentional new behavior. For UI changes, compare
-Dashboard, Settings, Diagnostics, Help and the accessibility disclosure; retain
-labels, spacing, enabled states and permission flows unless a change is requested.
+Home, Gestures, Settings, every Advanced group and the accessibility disclosure.
+Check default and large text, light/dark mode, setup denial/retry, optional overlay
+skip, draft edits across tabs and rotation, Apply/Discard, and single-group resets.
+Permission launchers and persistence remain in MainActivity; presentation receives
+callbacks. The small Activity-owned SettingsDraft ViewModel retains unapplied
+values across configuration changes without writing them to saved preferences.
 
 Before committing, inspect `git diff --check` and ensure models, test images,
 signing keys, SDK paths, build outputs and local logs have the correct ownership.

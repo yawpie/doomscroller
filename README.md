@@ -1,4 +1,4 @@
-# Hand Scroll Native
+# Scroll Vision
 
 Kotlin Android application with Compose Material 3, front CameraX/MediaPipe
 tracking, pose/flick/continuous recognition, foreground camera service, draggable
@@ -35,17 +35,29 @@ signing is for development; the release APK is unsigned.
 
 ## Controls
 
-Read the accessibility disclosure and grant camera permission. Allow the optional
-floating widget, or disable it in Settings. Enable accessibility yourself in Android
-Settings. Start on Dashboard and wait for Active before switching to a feed.
+Home shows readiness and one Start / Pause / Resume control, with Stop below it.
+Use its permission checklist to grant camera access and read the affirmative
+accessibility disclosure, then enable Scroll Vision gestures in Android Settings.
+Camera denial explains retry or App info access. Floating controls and notifications
+are optional; Skip floating controls saves the existing overlay preference as off.
+Start on Home and wait for Tracking before switching to a feed.
 
 HYBRID/POSE: point down/up to navigate, show an open hand for one single tap per
 presentation, or show thumbs-up for double tap. Pointing/thumbs-up repeat after the
 configured rearm delay and fresh confirmation. CONTINUOUS/FLICK preserve their
-movement controls. Settings changes pause an active session; Resume applies them.
+movement controls. The illustrated cards in Gestures explain the current mode and
+repeats. Tap video sends a center tap; Pause tracking releases the camera.
+Settings offers direction reversal and floating controls. Every existing technical
+control, diagnostics field and manual action test is grouped under Advanced.
+Edits remain a draft across tabs and rotation. Apply changes saves once and pauses
+active or starting tracking; Resume from Home restarts with the saved values.
+Discard and per-group resets affect the draft. Drafts are not saved across process
+death; existing saved preference keys and values are preserved.
 Pause releases capture; Stop removes the notification and overlay. Screen lock
 pauses, and process restart remains stopped. Camera-free screen-action tests are
-available while stopped. Dispatch completion does not guarantee a feed response.
+available in Settings → Advanced while stopped; they explicitly act on another
+app. Dispatch completion does not guarantee a feed response. Floating controls show
+status, Pause, Stop and Open app; resume always needs an explicit press in Home.
 
 ## Documentation
 
