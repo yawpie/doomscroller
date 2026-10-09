@@ -59,6 +59,7 @@ class GestureCameraService : LifecycleService() {
 
     override fun onCreate() {
         super.onCreate()
+        store.serviceRunning = true
         actions = ScrollActionCoordinator(adapter, lifecycleScope, SystemClock::elapsedRealtime)
         ContextCompat.registerReceiver(this, screenReceiver, IntentFilter(Intent.ACTION_SCREEN_OFF), ContextCompat.RECEIVER_NOT_EXPORTED)
         lifecycleScope.launch {
@@ -81,8 +82,10 @@ class GestureCameraService : LifecycleService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
         when (intent?.action) {
-            ACTION_START -> startSession()
+            ACTION_START -> if (store.acceptsStart(intent.getLongExtra(EXTRA_START_REQUEST, -1))) startSession()
+                else if (!foreground) stopSelf(startId)
             ACTION_PAUSE -> pauseSession()
+            ACTION_PREPARE_PRACTICE -> { pauseSession(); store.practicePrepared() }
             ACTION_STOP -> stopSession()
             ACTION_FORWARD -> requestManual(ScrollAction.FORWARD)
             ACTION_BACKWARD -> requestManual(ScrollAction.BACKWARD)
@@ -101,6 +104,7 @@ class GestureCameraService : LifecycleService() {
     }
 
     private fun startSession() {
+        if (store.practiceOpen) { if (!foreground) stopSelf(); return }
         if (machine.state == GestureSessionState.Active || machine.state == GestureSessionState.Starting) return
         val error = prerequisites()
         if (error != null) { fail(error); return }
@@ -119,7 +123,7 @@ class GestureCameraService : LifecycleService() {
             if (settings.overlayEnabled) createOverlay()
             publish()
             val begin = {
-                if (!destroyed && machine.generation == token && machine.state == GestureSessionState.Starting) {
+                if (!destroyed && !store.practiceOpen && machine.generation == token && machine.state == GestureSessionState.Starting) {
                     lastResultMs = SystemClock.elapsedRealtime()
                     val controller = CameraController(this, settings.tracking,
                         onResult = { result ->
@@ -210,7 +214,7 @@ class GestureCameraService : LifecycleService() {
     }
 
     private fun requestManual(action: ScrollAction) {
-        if (machine.state != GestureSessionState.Active) return
+        if (store.practiceOpen || machine.state != GestureSessionState.Active) return
         manualSwipe?.cancel()
         val token = machine.generation
         actions.setSessionActive(false)
@@ -302,6 +306,8 @@ class GestureCameraService : LifecycleService() {
     override fun onDestroy() {
         destroyed = true
         releaseSession()
+        store.serviceRunning = false
+        store.practicePrepared()
         overlay?.close(); overlay = null
         unregisterReceiver(screenReceiver)
         if (machine.state !is GestureSessionState.Error) machine.stop()
@@ -312,7 +318,9 @@ class GestureCameraService : LifecycleService() {
 
     companion object {
         const val ACTION_START = "dev.autoscroll.nativeapp.START"
+        const val EXTRA_START_REQUEST = "startRequest"
         const val ACTION_PAUSE = "dev.autoscroll.nativeapp.PAUSE"
+        const val ACTION_PREPARE_PRACTICE = "dev.autoscroll.nativeapp.PREPARE_PRACTICE"
         const val ACTION_STOP = "dev.autoscroll.nativeapp.STOP"
         const val ACTION_FORWARD = "dev.autoscroll.nativeapp.FORWARD"
         const val ACTION_BACKWARD = "dev.autoscroll.nativeapp.BACKWARD"

@@ -26,6 +26,29 @@ class SessionStore {
     val diagnostics = mutableDiagnostics.asStateFlow()
     // The application outlives service instances: Stop -> Start must await the old worker too.
     var cameraReleased = CompletableDeferred(Unit)
+    var serviceRunning = false
+    var practiceOpen = false
+        private set
+    private var practicePreparation = CompletableDeferred(Unit)
+    private var startRequest = 0L
+    fun requestStart(): Long = ++startRequest
+    fun acceptsStart(request: Long) = !practiceOpen && request == startRequest
+
+    fun enterPractice() {
+        practiceOpen = true
+        startRequest++
+        machine.pause()
+        publish()
+        if (serviceRunning && practicePreparation.isCompleted) practicePreparation = CompletableDeferred()
+    }
+
+    // A paused state can precede service teardown. Acknowledge only after releaseSession.
+    fun practicePrepared() { practicePreparation.complete(Unit) }
+    suspend fun awaitPracticeCamera() {
+        practicePreparation.await()
+        cameraReleased.await()
+    }
+    fun leavePractice() { practiceOpen = false }
     private val mutableVisibility = MutableStateFlow(false)
     val visibility = mutableVisibility.asStateFlow()
     var activityVisible: Boolean

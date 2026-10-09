@@ -16,16 +16,20 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.graphics.Color
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.Lifecycle
 import dev.autoscroll.nativeapp.accessibility.AccessibilityScrollAdapter
 import dev.autoscroll.nativeapp.accessibility.GestureAccessibilityService
 import dev.autoscroll.nativeapp.accessibility.SwipeConfig
 import dev.autoscroll.nativeapp.presentation.HandScrollScreen
+import dev.autoscroll.nativeapp.presentation.PracticeScreen
+import dev.autoscroll.nativeapp.practice.PracticeController
 import dev.autoscroll.nativeapp.presentation.settingsChangePauses
 import dev.autoscroll.nativeapp.presentation.SettingsDraft
 import dev.autoscroll.nativeapp.scrolling.ScrollAction
@@ -46,10 +50,17 @@ class MainActivity : ComponentActivity() {
     private var permissionError by mutableStateOf<String?>(null)
     private val permissionPreferences by lazy { getSharedPreferences("permission_setup", MODE_PRIVATE) }
     private val settingsDraft by lazy { ViewModelProvider(this)[SettingsDraft::class.java] }
+    private var practiceVisible by mutableStateOf(false)
+    private val practice by lazy {
+        PracticeController(this, this, lifecycleScope, app.session,
+            visible = { app.session.activityVisible && lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) },
+            cameraAllowed = ::hasCamera)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (settingsDraft.value == null) settingsDraft.value = app.settings.state.value
+        if (savedInstanceState?.getBoolean("practiceVisible") == true) openPractice()
         setContent {
             MaterialTheme(colorScheme = if (isSystemInDarkTheme()) darkColorScheme(
                 primary = Color(0xFFB4D995), onPrimary = Color(0xFF213610),
@@ -69,7 +80,25 @@ class MainActivity : ComponentActivity() {
                 val cameraRequested = remember(permissionRevision) { permissionPreferences.getBoolean("cameraRequested", false) }
                 val cameraBlocked = !cameraGranted && cameraRequested && !shouldShowRequestPermissionRationale(Manifest.permission.CAMERA)
                 val overlayGranted = remember(permissionRevision) { Settings.canDrawOverlays(this) }
-                HandScrollScreen(
+                val cameraExplanation = if (!cameraGranted && cameraRequested) {
+                    if (cameraBlocked) "Camera access is blocked. In App info, open Permissions → Camera and allow access, then return here."
+                    else "Camera access was denied. Tracking needs the front camera; you can allow it below when ready."
+                } else null
+                val requestCamera = {
+                    if (cameraBlocked) openPermissionSettings(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, "package:$packageName".toUri()))
+                    else {
+                        permissionPreferences.edit().putBoolean("cameraRequested", true).apply()
+                        cameraRequest.launch(Manifest.permission.CAMERA)
+                    }
+                }
+                val savedScreens = rememberSaveableStateHolder()
+                if (practiceVisible) {
+                    val practiceState by practice.state.collectAsStateWithLifecycle()
+                    PracticeScreen(practiceState, settings, cameraGranted, cameraBlocked, cameraExplanation, permissionError,
+                        onCameraPermission = requestCamera, onStart = { practice.start(settings) },
+                        onStop = { practice.stop() }, onExit = ::leavePractice)
+                } else savedScreens.SaveableStateProvider("main") {
+                    HandScrollScreen(
                     state = state,
                     settings = settings,
                     draft = settingsDraft.value ?: settings,
@@ -79,23 +108,14 @@ class MainActivity : ComponentActivity() {
                     consent = consent,
                     cameraGranted = cameraGranted,
                     cameraBlocked = cameraBlocked,
-                    cameraExplanation = if (!cameraGranted && cameraRequested) {
-                        if (cameraBlocked) "Camera access is blocked. In App info, open Permissions → Camera and allow access, then return here."
-                        else "Camera access was denied. Tracking needs the front camera; you can allow it below when ready."
-                    } else null,
+                    cameraExplanation = cameraExplanation,
                     overlayGranted = overlayGranted,
                     notificationRequired = Build.VERSION.SDK_INT >= 33 &&
                         ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED,
                     manualRunning = manualRunning,
                     manualResult = manualResult,
                     permissionError = permissionError,
-                    onCameraPermission = {
-                        if (cameraBlocked) openPermissionSettings(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, "package:$packageName".toUri()))
-                        else {
-                            permissionPreferences.edit().putBoolean("cameraRequested", true).apply()
-                            cameraRequest.launch(Manifest.permission.CAMERA)
-                        }
-                    },
+                    onCameraPermission = requestCamera,
                     onOverlayPermission = {
                         openPermissionSettings(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, "package:$packageName".toUri()))
                     },
@@ -110,22 +130,56 @@ class MainActivity : ComponentActivity() {
                     onStop = ::stopSession,
                     onSettingsChange = ::updateSettings,
                     onTestAction = ::testAction,
-                )
+                    onPractice = ::openPractice,
+                    )
+                }
             }
         }
     }
 
     override fun onStart() { super.onStart(); app.session.activityVisible = true }
     override fun onResume() { super.onResume(); permissionRevision++ }
+    override fun onPause() {
+        if (practiceVisible) practice.stop("Practice stopped when you left the screen. Press Start practice when ready.")
+        super.onPause()
+    }
     override fun onStop() { app.session.activityVisible = false; super.onStop() }
-    override fun onDestroy() { manualTest?.cancel(); super.onDestroy() }
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean("practiceVisible", practiceVisible)
+        super.onSaveInstanceState(outState)
+    }
+    override fun onDestroy() {
+        manualTest?.cancel()
+        if (practiceVisible) { practice.close(); app.session.leavePractice() }
+        super.onDestroy()
+    }
+
+    private fun openPractice() {
+        manualTest?.cancel(); manualTest = null; manualRunning = false
+        permissionError = null
+        app.session.enterPractice()
+        practiceVisible = true
+        if (app.session.serviceRunning) try {
+            startService(Intent(this, GestureCameraService::class.java).setAction(GestureCameraService.ACTION_PREPARE_PRACTICE))
+        } catch (_: Exception) {
+            permissionError = "Tracking could not prepare the camera. Leave practice and try again before starting."
+        }
+    }
+
+    private fun leavePractice() {
+        practice.stop()
+        app.session.leavePractice()
+        practiceVisible = false
+    }
 
     private fun hasCamera() = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
     private fun startSession() {
-        if (!app.session.activityVisible) return
+        if (!app.session.activityVisible || app.session.practiceOpen) return
         manualTest?.cancel()
         try {
-            ContextCompat.startForegroundService(this, Intent(this, GestureCameraService::class.java).setAction(GestureCameraService.ACTION_START))
+            ContextCompat.startForegroundService(this, Intent(this, GestureCameraService::class.java)
+                .setAction(GestureCameraService.ACTION_START)
+                .putExtra(GestureCameraService.EXTRA_START_REQUEST, app.session.requestStart()))
         } catch (problem: Exception) {
             app.session.machine.fail(problem.message ?: "Cannot start foreground camera")
             app.session.publish()
@@ -156,7 +210,7 @@ class MainActivity : ComponentActivity() {
         app.settings.update(settings)
     }
     private fun testAction(action: ScrollAction) {
-        if (manualRunning || !app.settings.accessibilityConsent || !GestureAccessibilityService.readiness.value ||
+        if (app.session.practiceOpen || manualRunning || !app.settings.accessibilityConsent || !GestureAccessibilityService.readiness.value ||
             app.session.machine.state != GestureSessionState.Stopped) return
         manualTest?.cancel()
         manualRunning = true

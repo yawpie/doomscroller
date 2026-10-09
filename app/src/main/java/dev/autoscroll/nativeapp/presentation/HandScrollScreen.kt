@@ -316,7 +316,7 @@ private fun compactGuide(settings: NativeSettings) = when (settings.mode) {
     GestureMode.CONTINUOUS -> "Move your palm vertically to scroll. Hold still to stop scrolling. Pose taps are off in this mode."
 } + if (settings.inverted) " Scroll direction is reversed." else ""
 
-private fun modeLabel(mode: GestureMode) = when (mode) {
+internal fun modeLabel(mode: GestureMode) = when (mode) {
     GestureMode.HYBRID -> "Hybrid · poses and movement"
     GestureMode.POSE -> "Poses only"
     GestureMode.FLICK -> "Flicks only"

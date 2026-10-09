@@ -47,6 +47,12 @@ presentation, or show thumbs-up for double tap. Pointing/thumbs-up repeat after 
 configured rearm delay and fresh confirmation. CONTINUOUS/FLICK preserve their
 movement controls. The illustrated cards in Gestures explain the current mode and
 repeats. Tap video sends a center tap; Pause tracking releases the camera.
+Gestures → Practice safely uses saved recognition settings with a local sample
+feed and live feedback. It needs camera access only. Start practice is explicit;
+entry pauses external tracking and cancels pending manual tests. Leaving, locking,
+backgrounding or recreation releases its camera and never restarts it automatically.
+Return to Home and press Start / Resume to control another app again. Practice
+does not create an accessibility action adapter or send any external swipe or tap.
 Settings offers direction reversal and floating controls. Every existing technical
 control, diagnostics field and manual action test is grouped under Advanced.
 Edits remain a draft across tabs and rotation. Apply changes saves once and pauses

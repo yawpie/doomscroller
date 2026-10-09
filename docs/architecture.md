@@ -13,7 +13,7 @@ CameraX ImageAnalysis (front, KEEP_ONLY_LATEST)
   -> public AccessibilityService.dispatchGesture
 ```
 
-Gesture recognition is deterministic with explicit timestamps. Detectors never dispatch touches, know CameraX types or call Compose. The application owns a single SessionStore with StateFlow and immutable settings. LifecycleService is the camera/session owner; Compose observes state and sends commands. A lightweight WindowManager view keeps the overlay independent of Activity destruction. Constructor injection supplies camera callbacks and the scrolling executor/clock; no DI framework is required.
+Gesture recognition is deterministic with explicit timestamps. Detectors never dispatch touches, know CameraX types or call Compose. The application owns a single SessionStore with StateFlow and immutable settings. LifecycleService owns external tracking; the Activity owns isolated practice. Compose observes state and sends commands. A lightweight WindowManager view keeps the overlay independent of Activity destruction. Constructor injection supplies camera callbacks and the scrolling executor/clock; no DI framework is required.
 
 ## State and lifecycle
 
@@ -22,6 +22,32 @@ Gesture recognition is deterministic with explicit timestamps. Detectors never d
 Startup calls startForeground before camera initialization. Service is START_NOT_STICKY and has no boot receiver: process recreation starts stopped. Screen off pauses; unlock does not start capture. Permission checks and camera state errors stop dispatch/release capture on permission loss, privacy toggles, unavailable camera or accessibility disconnection. Resume opens the app and requires an explicit button press. Activity destruction alone does not stop an active service.
 
 Android may terminate a service/process; this implementation does not promise persistence or automatic recovery. Runtime camera, foreground-service and OEM behavior require device validation. App settings changes pause an active session, then recreate the pipeline on explicit Resume.
+
+## Isolated practice
+
+Gestures → Practice safely reuses CameraController and GestureCoordinator with a
+saved NativeSettings snapshot. PracticeFeedback maps decisions and velocity into
+five local sample cards, a playback toggle and double-tap count. It never creates
+ScrollActionCoordinator, AccessibilityScrollAdapter or an external executor.
+Movement is a local demonstration, not target-feed calibration.
+
+Entry reserves practice ownership in SessionStore before awaiting work. If the
+service exists, an explicit preparation command acknowledges only after
+releaseSession has published its worker teardown. Practice waits for that
+acknowledgement and cameraReleased; reading an old completed cameraReleased
+immediately after publishing Paused would race the service command. Queued service
+Start/manual commands cannot activate while practice owns the screen. Practice
+entry also invalidates the request token carried by queued Home Start commands,
+so rapid entry/exit cannot activate an older Start after the reservation ends.
+Only a new explicit Home press supplies a current request token. Practice
+publishes its own cameraReleased deferred on close before the reservation is
+lifted, so explicit Home Start/Resume waits for that worker too.
+
+Explicit Start practice requires only camera access and a resumed Activity.
+Generation/visibility/permission checks reject late results. Back, Activity pause,
+lock, background and recreation cancel initialization and close capture; return
+stays stopped. The Activity keeps the settings draft in SettingsDraft and saves
+main-screen tab state while practice is open. Nothing is applied by route changes.
 
 ## Timing and ownership
 
@@ -38,7 +64,7 @@ HYBRID and POSE include the native tap extension; CONTINUOUS and FLICK isolate t
 
 Down pose/flick -> forward; up -> backward; inversion applies once and does not affect taps. Continuous motion uses the same velocity/sensitivity/EMA mapping, rendered as bounded 100ms proportional touchscreen strokes. This is an intentional adapter difference from Flutter's per-frame ListView ticker: small strokes can be below another app's touch threshold. Taps use the content center and 50ms stationary strokes; double tap is two sequential strokes in one dispatch, separated by up to 100ms within Android's double-tap timeout. No delayed backlog of actions is retained. Busy, stale, inactive, disconnected, locked, system and own-app targets reject all output, including taps. The overlay's actual bounds are excluded from the gesture path; center taps use a clear column if the widget occupies the center.
 
-Every overlay press/drag suppresses recognition dispatch; explicit overlay swipe tests wait for the interaction quiet period, pause classification until the single action completes, then reset evidence. Camera-free dashboard tests run only when Stopped: one explicit action after the task backgrounds. Swipe API completion and observed feed navigation are separate results.
+Every overlay press/drag suppresses recognition dispatch and resets recognition evidence. Floating controls contain status, Pause, Stop and Open app; resuming requires Home. Camera-free external tests in Settings → Advanced run only when Stopped: one explicit action after the task backgrounds. They are separate from safe local practice. Swipe API completion and observed feed navigation are separate results.
 
 Accessibility consumes only window-state package names, disables window-content retrieval, and does not traverse nodes or read text. Physical touch outside the overlay cannot be monitored without additional intrusive capabilities. A dispatch can interrupt a finger touch; an already submitted short stroke can finish after pause/stop because dispatchGesture has no public cancellation operation.
 
@@ -53,8 +79,9 @@ handles permissions/intents and sends service commands. `presentation/HandScroll
 receives immutable values and explicit callbacks; `SettingsPanel` owns rendering
 of settings controls. Neither composable accesses the application, preferences or
 Android services. Local tab/dialog state remains in Compose. `NativeSettings` is
-separate from `SettingsStore`, which owns validation and persistence. The existing
-service/session lifetime and constructor-injected adapters remain unchanged.
+separate from `SettingsStore`, which owns validation and persistence. The external
+service/session lifetime and dispatch adapters remain separate from the
+Activity-owned local practice controller.
 
 Production models and instrumentation images use standard Android source sets.
 Both JVM suites receive an explicit Gradle fixture path into `parity-fixtures`;

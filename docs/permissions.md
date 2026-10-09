@@ -4,6 +4,14 @@ Home provides a guided checklist. Start remains blocked until camera, consent an
 accessibility are ready, plus overlay access when floating controls are enabled.
 Notifications never block readiness.
 
+Gestures → Practice safely needs only CAMERA. Accessibility consent/connection,
+floating controls and notification access are unnecessary. Start practice is
+explicit; permission grants or a return from Settings never start it automatically.
+It keeps all feedback and feed movement inside Scroll Vision. Entering practice
+pauses external tracking and cancels pending manual tests; an already submitted
+short accessibility stroke can still finish because Android has no public
+dispatchGesture cancellation operation.
+
 If a manufacturer cannot open the requested system settings page, onboarding falls
 back to App info. If that also fails, the checklist explains the manual route.
 Opening system settings stops an existing session, so returning does not activate
