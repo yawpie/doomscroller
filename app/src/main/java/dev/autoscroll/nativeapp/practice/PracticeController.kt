@@ -65,7 +65,7 @@ internal class PracticeController(
                         }
                     },
                     onMetrics = {},
-                    onError = { error -> if (canReceive(token)) fail(error.message ?: "Camera or recognition failed. Try Start practice again.") },
+                    onError = { error -> if (canReceive(token)) fail(practiceFailureMessage(error)) },
                 )
                 camera = controller
                 controller.start(owner)
@@ -88,7 +88,7 @@ internal class PracticeController(
                     }
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (error: Exception) { if (canReceive(token)) fail(error.message ?: "Could not start practice. Try again.") }
+            catch (error: Exception) { if (canReceive(token)) fail(practiceFailureMessage(error)) }
         }
     }
 
@@ -120,4 +120,9 @@ internal class PracticeController(
     }
 
     fun close() { stop(); disposed = true }
+}
+
+internal fun practiceFailureMessage(error: Throwable): String {
+    val recovery = "Practice could not use the camera. Check camera permission and turn on Camera access in Android's privacy controls. Close other camera apps, then press Start practice again."
+    return recovery + error.message?.takeIf { it.isNotBlank() }?.let { "\nDetails: $it" }.orEmpty()
 }
