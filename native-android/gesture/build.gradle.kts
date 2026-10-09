@@ -8,5 +8,7 @@ dependencies {
 }
 
 tasks.test {
-    systemProperty("parityFixtures", rootProject.file("parity-fixtures/gesture-goldens.json").absolutePath)
+    val fixtures = rootProject.file("parity-fixtures/gesture-goldens.json")
+    inputs.file(fixtures)
+    systemProperty("parityFixtures", fixtures.absolutePath)
 }

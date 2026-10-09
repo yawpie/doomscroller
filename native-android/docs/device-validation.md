@@ -1,6 +1,6 @@
 # Physical-device validation
 
-Do not treat compiler, synthetic landmark fixtures, or Android dispatch callbacks as proof that TikTok/Reels/Shorts moved. Record the device/API, model, image dimension, thresholds, light, distance and observed content change for each trial. Installed Flutter/native IDs differ so measurements can be collected on the same device without replacing the baseline.
+Do not treat compiler, synthetic landmark fixtures, or Android dispatch callbacks as proof that TikTok/Reels/Shorts moved. Record the device/API, model, image dimension, thresholds, light, distance and observed content change for each trial. The native application ID remains dev.autoscroll.nativeapp. Historical measurements must be labeled by revision and settings; the legacy source is available only in Git history.
 
 ## Build/install and prerequisites
 

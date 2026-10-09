@@ -1,6 +1,6 @@
 # Native Android architecture
 
-The independent `native-android` project builds `dev.autoscroll.nativeapp`. `:gesture` is Kotlin/JVM without Android dependencies; `:app` contains Compose Material 3, CameraX, MediaPipe, the foreground service, native overlay and accessibility adapter. The Flutter project continues to build separately. There is no Flutter Gradle plugin, engine, platform channel, Dart runtime or Flutter Activity in the native project.
+The independent `native-android` project builds `dev.autoscroll.nativeapp`. `:gesture` is Kotlin/JVM without Android dependencies; `:app` contains Compose Material 3, CameraX, MediaPipe, the foreground service, native overlay and accessibility adapter. The legacy project has been removed; this is the only application. There is no Flutter Gradle plugin, engine, platform channel, Dart runtime or Flutter Activity in the native project.
 
 ```text
 CameraX ImageAnalysis (front, KEEP_ONLY_LATEST)
@@ -44,4 +44,19 @@ Accessibility consumes only window-state package names, disables window-content 
 
 ## Model and resources
 
-`assets/models/hand_landmarker.task` is included through the asset source directory with its original license. SHA-256: `fbc2a30080c3c557093b5ddfc334698132eb341044cee322ccf8bcf3607cde1`. No extra model/download, INTERNET permission, frame recording, diagnostic disk traces, analytics or backend is added. Only preferences (settings, consent and overlay position) persist. Diagnostics remain in memory.
+`app/src/main/assets/models/hand_landmarker.task` is included through the standard Android asset source directory with its original license. SHA-256: `fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1`. No extra model/download, INTERNET permission, frame recording, diagnostic disk traces, analytics or backend is added. Only preferences (settings, consent and overlay position) persist. Diagnostics remain in memory.
+
+## Developer-facing boundaries
+
+MainActivity is the Android entry point: it collects lifecycle-aware StateFlows,
+handles permissions/intents and sends service commands. `presentation/HandScrollScreen`
+receives immutable values and explicit callbacks; `SettingsPanel` owns rendering
+of settings controls. Neither composable accesses the application, preferences or
+Android services. Local tab/dialog state remains in Compose. `NativeSettings` is
+separate from `SettingsStore`, which owns validation and persistence. The existing
+service/session lifetime and constructor-injected adapters remain unchanged.
+
+Production models and instrumentation images use standard Android source sets.
+Both JVM suites receive an explicit Gradle fixture path into `parity-fixtures`;
+they never search parent directories for a legacy checkout. See the
+[development guide](development.md) for ownership, review and validation rules.

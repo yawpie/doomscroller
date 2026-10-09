@@ -20,7 +20,9 @@ android {
     buildFeatures { compose = true }
     testOptions { unitTests.isReturnDefaultValues = true }
     testOptions.unitTests.all {
-        it.systemProperty("parityFixtures", rootProject.file("parity-fixtures/gesture-goldens.json").absolutePath)
+        val fixtures = rootProject.file("parity-fixtures/gesture-goldens.json")
+        it.inputs.file(fixtures)
+        it.systemProperty("parityFixtures", fixtures.absolutePath)
     }
 }
 kotlin { compilerOptions { jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17 } }

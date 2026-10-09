@@ -2,6 +2,8 @@
 
 Source review performed 2026-10-08 by the camera implementation agent, separately from the service/UI and accessibility implementation owners. This report distinguishes inspected code, supplied tests, executed checks, and device evidence. UI and service integration were still being completed during the first review; line references below identify that snapshot.
 
+This is a historical migration review. The legacy app was removed on 2026-10-09; current layout and validation are in [development](development.md) and [migration](migration.md).
+
 ## Architecture boundary audit
 
 | Boundary | Source evidence | Assessment |

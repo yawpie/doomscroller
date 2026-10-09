@@ -2,7 +2,27 @@
 
 ## Status
 
-Native implementation is present and independently buildable. Camera/service/overlay/accessibility/Compose integration is implemented; recognition parity, unit checks, native build and lint pass. Physical acceptance and release readiness are separate gates. Flutter is preserved until those acceptance checks are completed.
+Native implementation is present and independently buildable. Camera/service/overlay/accessibility/Compose integration is implemented; recognition parity, unit checks, native build and lint pass. Physical acceptance and release readiness are separate gates. The legacy Flutter variant has been removed at the user's request. Historical source remains in Git; native fixtures and the licensed model are self-contained. Device acceptance remains pending and does not block source retirement.
+
+## Native-only completion verification — 2026-10-09
+
+| Check | Current result |
+| --- | --- |
+| JVM regression suites | 83 passed: 58 gesture, 25 app; no failures/errors/skips. Saved 39 cases / 418 samples unchanged. |
+| Android lint and builds | `:app:lintDebug`, debug APK, unsigned release APK and instrumentation APK all pass after legacy removal. |
+| API 34 emulator instrumentation | 22 discovered: 19 passed, 3 assumption skips, no failures. Real bundled MediaPipe/model-fixture inference, settings persistence, Activity recreation and camera-free lifecycle checks executed. |
+| Permission-dependent skips | Two external accessibility dispatch tests and the preapproved overlay test skipped because access was not enabled. No phone permissions were changed. |
+| UI preservation | Dashboard, Settings, Diagnostics and Help initial viewports have zero changed app-area pixels against the pre-refactor native APK at 1080×2400; system bars excluded. Accessibility labels, bounds and enabled/selected states also match. All literal UI labels remain unchanged. |
+| Asset preservation | Model, instrumentation JPEG and golden JSON match their pre-retirement SHA-256 values. Both production APKs contain the original model, no Flutter runtime/packages and no instrumentation image/goldens. |
+| Manifest/privacy | Debug and release merged manifests have no network or microphone permission. Application ID and preference keys remain unchanged. |
+| Repository/tooling | No Dart files, package manifests, legacy wrapper or SDK metadata remain outside Git history. Native-only CI uses pinned action commits and the wrapper's official distribution checksum. Golden files are declared Gradle test inputs. |
+| Developer navigation | Local documentation links resolve; screen rendering and settings models have explicit ownership in the development guide. |
+
+Current emulator evidence is in ignored `artifacts/instrumentation.log` and
+`artifacts/ui-before`, `artifacts/ui-after`; JVM/lint reports remain under module
+build directories. CI is configured but has not run on GitHub; no commits were
+pushed. Live physical camera/feed behavior, sustained performance, the full
+permission/lifecycle matrix and release signing remain pending.
 
 ## Architecture and migration
 
@@ -10,9 +30,9 @@ Native implementation is present and independently buildable. Camera/service/ove
 - `:app`: Android Compose Material3 dashboard/settings/diagnostics/onboarding/help; CameraX front-camera analysis, MediaPipe worker, LifecycleService, application-owned StateFlow session, WindowManager controls, native accessibility adapter and centralized action coordinator.
 - Constructor injection supplies domain detectors, executor and clocks. Two modules enforce the useful framework boundary without a module per package or DI framework.
 - Camera/session state belongs to the foreground service and application store, not Compose. One worker and one authoritative session; generation guards and shared teardown completion cover stale callbacks and rapid service replacement.
-- The original Flutter app and channels remain unchanged as the baseline. The native deliverable has no Flutter runtime dependency; distinct application IDs permit coexistence. Only the root README adds native navigation, and one Dart test generates/verifies parity fixtures.
+- The former Flutter app/channels are retained only in Git history. The native application ID, preference keys, algorithms and UI are preserved. Licensed model, test image and saved goldens now live entirely inside native-android.
 
-The [inventory](migration-inventory.md) maps each old file to its replacement and records ownership. Main handled architecture/integration/Gradle/services/overlay/UI/docs; separate agents implemented gesture, camera/inference, and accessibility/action execution. The camera owner independently reviewed service/UI/action boundaries, reported defects, and supplied QA smoke tests; source fixes were re-reviewed. See [QA report](qa-review.md).
+The [inventory](migration-inventory.md) maps old responsibilities to current source. During the initial migration, separate implementation owners covered gesture, camera/inference, accessibility and application integration; the camera owner independently reviewed service/UI/action boundaries. That historical review is retained in the [QA report](qa-review.md). Current maintenance boundaries are in the [development guide](development.md).
 
 ## Implemented functionality
 
@@ -34,7 +54,7 @@ The [inventory](migration-inventory.md) maps each old file to its replacement an
 
 Original Dart acquisition callback timestamps are preserved as native analyzer-arrival elapsed timestamps. Sensor exposure/input/completion are recorded separately. Orientation follows the display instead of Flutter's portrait lock. The continuous detector/mapping is ported, while its output adapter changes from ListView's ticker to 100ms bounded touch strokes. Native pause/lock releases camera and explicit visible Resume replaces automatic foreground resumption. The baseline migration used open-hand rearm; the [native tap extension](tap-gestures.md) now reserves open hand for one pause tap per presentation and maps thumbs-up to double tap. Native rearming uses only a configurable elapsed-time delay and fresh confirmation, with no open/closed-hand requirement. Original rearm behavior remains a tested pure-domain compatibility option with taps disabled. See [parity guide](gesture-parity.md).
 
-## Validation evidence
+## Prior migration validation evidence
 
 | Check | Executed result |
 | --- | --- |
@@ -55,7 +75,7 @@ Original Dart acquisition callback timestamps are preserved as native analyzer-a
 | Native APK packaging |ZIP/DEX inspection found 0 Flutter assets/libs/packages; original model SHA256 retained. Final merged manifest has no network permissions |
 | Diff scope/whitespace |git diff --check passed; original production source retained |
 
-Full task-level logs are ignored local files: migration-flutter-analyze-final.log, migration-flutter-tests.log (baseline), migration-flutter-tests-final.log; native-validation-complete.log (all nonconnected Gradle tasks passed), native-validation-approved.log and native-validation-device.log (phone installation rejected), native-instrumentation-emulator.log (full emulator suite), and native-instrumentation-skips.log (two assumption skips with raw status). Generated reports are under `gesture/build/reports/tests`, `app/build/reports/tests/testDebugUnitTest`, `app/build/reports/lint-results-debug.html`, and `app/build/reports/androidTests/connected/debug`. The latter connected report describes the phone installation rejection; it must not be confused with the separate successful adb emulator runner log. Dashboard screenshot is in `app/build/reports/ui/dashboard.png`. Build outputs/reports are local and ignored by Git; rerun commands from [README](../README.md).
+The prior migration recorded these ignored local logs (some legacy logs have since been removed): migration-flutter-analyze-final.log, migration-flutter-tests.log (baseline), migration-flutter-tests-final.log; native-validation-complete.log (all nonconnected Gradle tasks passed), native-validation-approved.log and native-validation-device.log (phone installation rejected), native-instrumentation-emulator.log (full emulator suite), and native-instrumentation-skips.log (two assumption skips with raw status). Generated reports are under `gesture/build/reports/tests`, `app/build/reports/tests/testDebugUnitTest`, `app/build/reports/lint-results-debug.html`, and `app/build/reports/androidTests/connected/debug`. The latter connected report describes the phone installation rejection; it must not be confused with the separate successful adb emulator runner log. Dashboard screenshot is in `app/build/reports/ui/dashboard.png`. Build outputs/reports are local and ignored by Git; rerun commands from [README](../README.md).
 
 ## Performance
 
@@ -75,5 +95,5 @@ No sustained camera benchmark, thermal/battery run, accuracy trial or Flutter/na
 1. Complete manual permission onboarding and camera-free forward/backward validation; record dispatch separately from observed content change.
 2. Execute the [device trial matrix](device-validation.md), including20 pointing trials per direction, 20 flicks per direction, 20 neutral/jitter trials, timed pose repetition, open-hand tap debounce, delay persistence, tracking loss, rotation and rapid lifecycle commands.
 3. Repeat on a newer device/API 34+ and a limited-performance device with equivalent settings. Record actual inference/gesture latency, CPU/memory,20 minute thermal/battery use and target compatibility.
-4. Resolve measured failures without rewriting goldens to hide behavior changes. Retire the Flutter variant only after applicable native acceptance gates pass, preserving behavioral fixtures/history.
+4. Resolve measured failures without rewriting goldens to hide behavior changes. Legacy source retirement is complete; continue native acceptance with preserved behavioral fixtures/history.
 5. Prepare signed release and required store disclosures/declarations only after device acceptance.
