@@ -13,8 +13,7 @@ import java.io.File
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class ScrollGoldenParityTest {
     @Test fun dartGoldenVelocityAndDirectionMatchNativeActionMapping() = runTest {
-        val fixtureFile = generateSequence(File(requireNotNull(System.getProperty("user.dir")))) { it.parentFile }
-            .map { File(it, "parity-fixtures/gesture-goldens.json") }.first { it.isFile }
+        val fixtureFile = File(requireNotNull(System.getProperty("parityFixtures")))
         val fixture = JSONObject(fixtureFile.readText())
         val cases = fixture.getJSONArray("cases")
         var compared = 0

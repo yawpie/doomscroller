@@ -7,4 +7,4 @@
 - Size: 7,819,105 bytes.
 - SHA-256: `fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1`.
 
-The official model card lists Apache License 2.0; the upstream license is included in `LICENSE`. The APK packages this model as a Flutter asset. Keep the asset path in pubspec.yaml and HandTrackingChannel.kt consistent if replacing it. Runtime downloads are not used.
+The official model card lists Apache License 2.0; the upstream license is included in `LICENSE`. Android packages this directory through the standard `app/src/main/assets` source set. Keep `models/hand_landmarker.task` consistent with HandLandmarkerEngine if replacing it. Runtime downloads are not used.

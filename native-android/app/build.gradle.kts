@@ -18,9 +18,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures { compose = true }
-    sourceSets["main"].assets.srcDir("../../assets")
-    sourceSets["androidTest"].assets.srcDir("../../integration_test/fixtures")
     testOptions { unitTests.isReturnDefaultValues = true }
+    testOptions.unitTests.all {
+        it.systemProperty("parityFixtures", rootProject.file("parity-fixtures/gesture-goldens.json").absolutePath)
+    }
 }
 kotlin { compilerOptions { jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17 } }
 dependencies {

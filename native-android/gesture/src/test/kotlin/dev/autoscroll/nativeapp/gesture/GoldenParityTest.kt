@@ -14,7 +14,7 @@ class GoldenParityTest(private val id: String, private val fixture: JSONObject) 
         @JvmStatic
         @Parameterized.Parameters(name = "{0}")
         fun fixtures(): Collection<Array<Any>> {
-            val file = File(System.getProperty("parityFixtures", "../../parity-fixtures/gesture-goldens.json"))
+            val file = File(requireNotNull(System.getProperty("parityFixtures")))
             val cases = JSONObject(file.readText()).getJSONArray("cases")
             require(cases.length() >= 24)
             return (0 until cases.length()).map {
