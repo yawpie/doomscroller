@@ -1,7 +1,7 @@
 # Development guide
 
-Open `native-android` in Android Studio. It is the complete Gradle project; the
-repository root holds only navigation and CI configuration. Use the checked-in
+Open the repository root in Android Studio. It is the complete Gradle project,
+including both modules, documentation and CI configuration. Use the checked-in
 wrapper and pinned dependencies, not a system Gradle installation.
 
 ## Ownership and change locations
@@ -27,7 +27,7 @@ ownership or reuse need. These boundaries follow Android's
 
 ## Validation before a commit
 
-From `native-android` on Windows:
+From the repository root on Windows:
 
 ```powershell
 .\gradlew.bat :gesture:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease :app:assembleDebugAndroidTest

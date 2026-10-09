@@ -8,7 +8,7 @@ Covered cases include stationary/slow up/down, fast flick up/down, short fast mo
 
 ## Run
 
-From `native-android`:
+From the repository root:
 
 ```powershell
 .\gradlew.bat :gesture:test :app:testDebugUnitTest

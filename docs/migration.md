@@ -4,6 +4,12 @@
 
 Native implementation is present and independently buildable. Camera/service/overlay/accessibility/Compose integration is implemented; recognition parity, unit checks, native build and lint pass. Physical acceptance and release readiness are separate gates. The legacy Flutter variant has been removed at the user's request. Historical source remains in Git; native fixtures and the licensed model are self-contained. Device acceptance remains pending and does not block source retirement.
 
+The Android project now lives at the repository root. The relocation preserves
+source, resources and fixtures unchanged; CI and developer navigation use the
+root wrapper. All 83 JVM tests, lint, debug/release builds and instrumentation APK
+compilation passed from the new location. Device/UI checks were not repeated for
+this directory move.
+
 ## Native-only completion verification — 2026-10-09
 
 | Check | Current result |
@@ -30,7 +36,7 @@ permission/lifecycle matrix and release signing remain pending.
 - `:app`: Android Compose Material3 dashboard/settings/diagnostics/onboarding/help; CameraX front-camera analysis, MediaPipe worker, LifecycleService, application-owned StateFlow session, WindowManager controls, native accessibility adapter and centralized action coordinator.
 - Constructor injection supplies domain detectors, executor and clocks. Two modules enforce the useful framework boundary without a module per package or DI framework.
 - Camera/session state belongs to the foreground service and application store, not Compose. One worker and one authoritative session; generation guards and shared teardown completion cover stale callbacks and rapid service replacement.
-- The former Flutter app/channels are retained only in Git history. The native application ID, preference keys, algorithms and UI are preserved. Licensed model, test image and saved goldens now live entirely inside native-android.
+- The former Flutter app/channels are retained only in Git history. The native application ID, preference keys, algorithms and UI are preserved. Licensed model, test image and saved goldens now live entirely inside the root Android project.
 
 The [inventory](migration-inventory.md) maps old responsibilities to current source. During the initial migration, separate implementation owners covered gesture, camera/inference, accessibility and application integration; the camera owner independently reviewed service/UI/action boundaries. That historical review is retained in the [QA report](qa-review.md). Current maintenance boundaries are in the [development guide](development.md).
 

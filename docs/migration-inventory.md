@@ -1,6 +1,6 @@
 # Migration inventory
 
-The only maintained application is `native-android`. Legacy source can be reviewed
+The only maintained application is the native Android project at the repository root. Legacy source can be reviewed
 in Git revision `078544f`; it is no longer part of the working tree or build.
 
 | Former responsibility | Current source |

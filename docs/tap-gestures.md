@@ -1,6 +1,6 @@
 # Native tap gestures
 
-This extension applies only to `native-android`. The saved Dart parity fixtures remain unchanged; legacy production source is preserved in Git history. Use HYBRID (default) or POSE mode and enable the existing accessibility service through Android Settings.
+This extension applies to the native Android app. The saved Dart parity fixtures remain unchanged; legacy production source is preserved in Git history. Use HYBRID (default) or POSE mode and enable the existing accessibility service through Android Settings.
 
 | Pose | Action |
 | --- | --- |

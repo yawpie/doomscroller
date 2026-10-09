@@ -5,7 +5,7 @@ Dart implementation. Its generator is recoverable from Git revision `078544f`,
 at `test/native_parity_baseline_test.dart`; the native app requires no Dart SDK.
 The JSON was moved unchanged during removal of the legacy app.
 
-Run from `native-android`:
+Run from the repository root:
 
 ```powershell
 .\gradlew.bat :gesture:test :app:testDebugUnitTest

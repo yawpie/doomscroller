@@ -1,6 +1,6 @@
 # Native Android architecture
 
-The independent `native-android` project builds `dev.autoscroll.nativeapp`. `:gesture` is Kotlin/JVM without Android dependencies; `:app` contains Compose Material 3, CameraX, MediaPipe, the foreground service, native overlay and accessibility adapter. The legacy project has been removed; this is the only application. There is no Flutter Gradle plugin, engine, platform channel, Dart runtime or Flutter Activity in the native project.
+The Gradle project at the repository root builds `dev.autoscroll.nativeapp`. `:gesture` is Kotlin/JVM without Android dependencies; `:app` contains Compose Material 3, CameraX, MediaPipe, the foreground service, native overlay and accessibility adapter. The legacy project has been removed; this is the only application. There is no Flutter Gradle plugin, engine, platform channel, Dart runtime or Flutter Activity in the native project.
 
 ```text
 CameraX ImageAnalysis (front, KEEP_ONLY_LATEST)
