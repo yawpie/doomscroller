@@ -35,7 +35,13 @@ Files: MainActivity.kt; presentation/HandScrollScreen.kt; new presentation/Pract
 ## Task 3: Integration and device evidence
 
 1. Run repository-required :gesture:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease :app:assembleDebugAndroidTest.
-2. Use emulator Pixel_7_API_34 explicitly (avoid personal phone). Install update preserving app data; run connected instrumentation with ANDROID_SERIAL selecting emulator. Record skips accurately.
+2. Use emulator Pixel_7_API_34 explicitly (avoid personal phone). Install update preserving app data; run instrumentation through explicit adb -s emulator-5554 commands. Record skips accurately.
 3. Inspect screenshots and actual interactions for setup/denial/disclosure, Home, Gestures, Settings, Advanced, practice; dark mode and large text. Exercise draft apply/reset and camera exit/background lifecycle. Capture evidence under artifacts; logs/screenshots follow ignore conventions.
 4. Fix findings through implementer and re-review. Document actual validation and remaining physical-hand/feed/performance limits. Final independent overall review.
 5. Leave tracked commits on requested branch. Do not push/merge or change personal-device permissions. Summarize changes, evidence, unverified work; defer optional timers, new gestures and presets.
+
+## Execution record
+
+- Task 1: committed `84953a8`; independent specification and quality reviews approved.
+- Task 2: committed `d39038e`; specification recovery finding fixed in `4650db0` and re-review approved.
+- Task 3: required checks and emulator inspection completed; final overall quality review approved `4650db0` without actionable findings. Results and explicit verification limits: [UX validation](../ui-ux-validation.md).
