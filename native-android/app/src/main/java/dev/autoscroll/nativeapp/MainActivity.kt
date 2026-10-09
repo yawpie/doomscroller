@@ -36,6 +36,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Locale
+import kotlin.math.roundToLong
 
 class MainActivity : ComponentActivity() {
     private val app get() = application as GestureApplication
@@ -99,7 +100,7 @@ class MainActivity : ComponentActivity() {
                                             onClick = ::pauseSession) { Text("Pause") }
                                         OutlinedButton(enabled = state != GestureSessionState.Stopped, onClick = ::stopSession) { Text("Stop") }
                                     }
-                                    Text("Wait for Active, then switch to your feed. In HYBRID or POSE mode: point down/up to navigate, show an open hand for one center tap (pause/play), or a thumbs-up for a double tap. Close your hand briefly before repeating a pose.")
+                                    Text("Wait for Active, then switch to your feed. In HYBRID or POSE mode: point down/up to navigate, show an open hand for one pause tap, or a thumbs-up for a double tap. Navigation and thumbs-up repeat after the rearm delay and fresh confirmation. No open or closed hand is needed to rearm.")
                                     HorizontalDivider()
                                     Text("Test an external screen action", style = MaterialTheme.typography.titleMedium)
                                     Text("Open a feed app first, return here, then tap a test. Hand Scroll moves to the background and sends the action after one second. Taps land at the center of the screen. Camera stays off.")
@@ -145,7 +146,8 @@ class MainActivity : ComponentActivity() {
                                     Text("1. Allow camera. Optionally allow the floating widget. Read the accessibility disclosure and enable Hand Scroll in Android Settings.")
                                     Text("2. Test swipes and taps with the camera stopped.")
                                     Text("3. Start on the Dashboard and wait for Active. Switch to TikTok, Reels, Shorts, or another vertically scrolling app.")
-                                    Text("4. In HYBRID or POSE mode, point with the index finger and curl the others to navigate. An open hand sends one center tap; a thumbs-up with all four other fingers curled sends a double tap. Hold briefly to confirm. Close your hand briefly before repeating; a held pose never repeats. Open hand also taps when releasing a pointing pose.")
+                                    Text("4. In HYBRID or POSE mode, point with the index finger and curl the others to navigate. A thumbs-up with the four other fingers curled sends a double tap. Rearm uses only elapsed time; adjust Rearm delay in Settings. After the delay each action needs fresh confirmation, even if you keep holding the pose.")
+                                    Text("Open hand is only a pause tap, never a rearm signal. Holding it sends one center tap and blocks movement gestures. Show another visible pose before another open-hand tap; tracking loss alone cannot repeat the tap.")
                                     Text("A single tap toggles pause/play only in feeds that support center tapping. Double-tap behavior depends on the target app. Flicks use fast vertical palm motion. CONTINUOUS and FLICK modes keep their existing movement controls without pose taps.")
                                     Text("Tap the status bubble to expand or collapse, and drag it to move it. Pause releases the camera. Resume opens this app, where you press Resume. Stop removes the widget and notification.")
                                     Text("Locking the screen pauses the session. After a process restart the session is stopped. Camera privacy controls, another camera app, battery restrictions, and device software may interrupt capture.")
@@ -253,10 +255,12 @@ private fun SettingsPanel(value: NativeSettings, enabled: Boolean, update: (Nati
     Text("Camera", style = MaterialTheme.typography.titleMedium)
     NumberSetting("Inference FPS", value.tracking.inferenceFps.toDouble(), 5.0..30.0, enabled, 24) { update(value.copy(tracking = value.tracking.copy(inferenceFps = it.toInt()))) }
     NumberSetting("Maximum image dimension", value.tracking.maximumInferenceDimension.toDouble(), 192.0..640.0, enabled, 13) { update(value.copy(tracking = value.tracking.copy(maximumInferenceDimension = it.toInt()))) }
-    Text("Pointing and tap poses · close hand to release", style = MaterialTheme.typography.titleMedium)
+    Text("Pointing and tap poses · timed rearm", style = MaterialTheme.typography.titleMedium)
     NumberSetting("Confirm (ms)", value.pose.confirmationDurationMs.toDouble(), 100.0..500.0, enabled, 19) { update(value.copy(pose = value.pose.copy(confirmationDurationMs = it.toLong()))) }
-    NumberSetting("Pose release (ms)", value.pose.releaseDurationMs.toDouble(), 100.0..500.0, enabled, 19) { update(value.copy(pose = value.pose.copy(releaseDurationMs = it.toLong()))) }
-    NumberSetting("Pose cooldown (ms)", value.pose.cooldownMs.toDouble(), 200.0..1500.0, enabled, 25) { update(value.copy(pose = value.pose.copy(cooldownMs = it.toLong()))) }
+    NumberSetting("Rearm delay (ms)", value.pose.cooldownMs.toDouble(), 200.0..3000.0, enabled, 55) {
+        update(value.copy(pose = value.pose.copy(cooldownMs = it.roundToLong())))
+    }
+    Text("Wait this long after an action, then confirm the next pose. Open hand sends one pause tap per presentation.")
     NumberSetting("Extended index / thumb angle", value.pose.minimumIndexAngle, 150.0..175.0, enabled) { update(value.copy(pose = value.pose.copy(minimumIndexAngle = it))) }
     NumberSetting("Curled finger angle", value.pose.maximumCurledAngle, 80.0..125.0, enabled) { update(value.copy(pose = value.pose.copy(maximumCurledAngle = it))) }
     NumberSetting("Vertical alignment", value.pose.minimumVerticalAlignment, 0.70..1.0, enabled) { update(value.copy(pose = value.pose.copy(minimumVerticalAlignment = it))) }

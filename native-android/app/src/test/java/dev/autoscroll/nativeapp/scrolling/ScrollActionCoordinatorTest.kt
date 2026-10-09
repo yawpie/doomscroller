@@ -31,6 +31,7 @@ class ScrollActionCoordinatorTest {
 
     @Test fun openHandAndThumbMapToTapsWithoutSwipeSettingsOrDirectionInversion() = runTest {
         assertTrue(dev.autoscroll.nativeapp.settings.NativeSettings().pose.tapGesturesEnabled)
+        assertEquals(HandPoseRearmMode.TIMED, dev.autoscroll.nativeapp.settings.NativeSettings().pose.rearmMode)
         val executor = FakeExecutor()
         var now = 1000L
         val coordinator = ScrollActionCoordinator(executor, this, { now })

@@ -65,7 +65,7 @@ data class ScrollConfig(
     }
 }
 
-enum class HandPoseRearmMode { OPEN_HAND, STABLE_POSE }
+enum class HandPoseRearmMode { OPEN_HAND, STABLE_POSE, TIMED }
 data class HandPoseDetectionConfig(
     val enabled: Boolean = true,
     val confirmationDurationMs: Long = 180,

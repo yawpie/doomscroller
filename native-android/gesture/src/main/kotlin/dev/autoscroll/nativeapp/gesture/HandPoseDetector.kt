@@ -11,6 +11,8 @@ class HandPoseDetector(val config: HandPoseDetectionConfig = HandPoseDetectionCo
             config.minimumObservations >= 2 && config.maximumSampleGapMs > 0) {
             "Invalid hand pose durations or observation count."
         }
+        require(config.rearmMode != HandPoseRearmMode.TIMED || config.cooldownMs > 0)
+        require(!config.tapGesturesEnabled || config.rearmMode == HandPoseRearmMode.TIMED)
     }
 
     var phase = HandPosePhase.READY
@@ -26,8 +28,10 @@ class HandPoseDetector(val config: HandPoseDetectionConfig = HandPoseDetectionCo
     private var rearmStart: Long? = null
     private var rearmObservations = 0
     private var rearmPose: RecognizedHandPose? = null
+    private var openHandTapped = false
 
-    val suppressesContinuous: Boolean get() = phase != HandPosePhase.READY
+    val suppressesContinuous: Boolean get() = phase != HandPosePhase.READY ||
+        (config.enabled && config.tapGesturesEnabled && currentPose == RecognizedHandPose.NEUTRAL)
     val confirmationProgress: Double get() {
         val start = candidateStart
         val time = lastTime
@@ -51,6 +55,12 @@ class HandPoseDetector(val config: HandPoseDetectionConfig = HandPoseDetectionCo
             return null
         }
         lastTime = time
+        if (config.rearmMode == HandPoseRearmMode.TIMED &&
+            (phase == HandPosePhase.LATCHED || phase == HandPosePhase.WAITING_REARM) && cooldownRemainingMs == 0L) {
+            phase = HandPosePhase.READY
+            activePose = null
+            discardEvidence()
+        }
         val pose = result.pose
         if (pose == null) {
             loseTracking()
@@ -58,6 +68,8 @@ class HandPoseDetector(val config: HandPoseDetectionConfig = HandPoseDetectionCo
         }
         if (previous != null && time - previous > config.maximumSampleGapMs) discardEvidence()
         currentPose = classifier.classify(pose.landmarks, activePose)
+        // Held open hand must not toggle playback again after the rearm timer expires.
+        if (currentPose != RecognizedHandPose.UNKNOWN && currentPose != RecognizedHandPose.NEUTRAL) openHandTapped = false
         when (phase) {
             HandPosePhase.READY -> if (isAction(currentPose)) beginCandidate(time)
             HandPosePhase.CONFIRMING -> {
@@ -70,6 +82,7 @@ class HandPoseDetector(val config: HandPoseDetectionConfig = HandPoseDetectionCo
                 if (observations >= config.minimumObservations && time - candidateStart!! >= config.confirmationDurationMs) {
                     val event = PoseEvent(activePose!!, time)
                     lastEvent = event
+                    if (event.pose == RecognizedHandPose.NEUTRAL) openHandTapped = true
                     phase = HandPosePhase.LATCHED
                     candidateStart = null
                     observations = 0
@@ -87,7 +100,7 @@ class HandPoseDetector(val config: HandPoseDetectionConfig = HandPoseDetectionCo
     }
 
     private fun updateRearm(time: Long) {
-        if (config.tapGesturesEnabled) return updateTapRearm(time)
+        if (config.rearmMode == HandPoseRearmMode.TIMED) return
         val openHand = config.rearmMode == HandPoseRearmMode.OPEN_HAND
         val valid = if (openHand) currentPose == RecognizedHandPose.NEUTRAL else currentPose != RecognizedHandPose.UNKNOWN
         if (!valid) {
@@ -110,30 +123,6 @@ class HandPoseDetector(val config: HandPoseDetectionConfig = HandPoseDetectionCo
         }
     }
 
-    private fun updateTapRearm(time: Long) {
-        val previousPose = lastEvent!!.pose
-        val valid = currentPose != RecognizedHandPose.UNKNOWN && currentPose != previousPose &&
-            !(isPointing(currentPose) && isPointing(previousPose))
-        if (!valid) {
-            discardEvidence()
-            return
-        }
-        phase = HandPosePhase.WAITING_REARM
-        if (rearmStart == null || rearmPose != currentPose) {
-            rearmStart = time
-            rearmObservations = 1
-            rearmPose = currentPose
-            return
-        }
-        if (rearmObservations < 2) rearmObservations++
-        if (time - rearmStart!! >= config.releaseDurationMs && rearmObservations >= 2 && cooldownRemainingMs == 0L) {
-            phase = HandPosePhase.READY
-            activePose = null
-            discardEvidence()
-            if (isAction(currentPose)) beginCandidate(time)
-        }
-    }
-
     private fun beginCandidate(time: Long) {
         phase = HandPosePhase.CONFIRMING
         activePose = currentPose
@@ -145,7 +134,8 @@ class HandPoseDetector(val config: HandPoseDetectionConfig = HandPoseDetectionCo
         pose == RecognizedHandPose.POINTING_UP || pose == RecognizedHandPose.POINTING_DOWN
 
     private fun isAction(pose: RecognizedHandPose): Boolean = isPointing(pose) ||
-        (config.tapGesturesEnabled && (pose == RecognizedHandPose.NEUTRAL || pose == RecognizedHandPose.THUMBS_UP))
+        (config.tapGesturesEnabled && (pose == RecognizedHandPose.THUMBS_UP ||
+            (pose == RecognizedHandPose.NEUTRAL && !openHandTapped)))
 
     private fun discardEvidence() {
         candidateStart = null
@@ -175,5 +165,6 @@ class HandPoseDetector(val config: HandPoseDetectionConfig = HandPoseDetectionCo
         rearmObservations = 0
         rearmPose = null
         lastEvent = null
+        openHandTapped = false
     }
 }

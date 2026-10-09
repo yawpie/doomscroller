@@ -32,7 +32,7 @@ The [inventory](migration-inventory.md) maps each old file to its replacement an
 
 39 deterministic Dart-generated golden cases contain 418 samples. The pure Kotlin replay checks exact event count/type/direction/time, detector state/ownership/suppression, and floating intermediates at 1e-9 tolerance. Separate action-layer tests replay all 39 cases for mapping/inversion. No Kotlin-generated expectations replace Dart results.
 
-Original Dart acquisition callback timestamps are preserved as native analyzer-arrival elapsed timestamps. Sensor exposure/input/completion are recorded separately. Orientation follows the display instead of Flutter's portrait lock. The continuous detector/mapping is ported, while its output adapter changes from ListView's ticker to 100ms bounded touch strokes. Native pause/lock releases camera and explicit visible Resume replaces automatic foreground resumption. The baseline migration used open-hand rearm; the subsequent [native tap extension](tap-gestures.md) maps open hand to single tap and thumbs-up to double tap, using closed hand to release. Original rearm behavior remains a tested pure-domain compatibility option with taps disabled. See [parity guide](gesture-parity.md).
+Original Dart acquisition callback timestamps are preserved as native analyzer-arrival elapsed timestamps. Sensor exposure/input/completion are recorded separately. Orientation follows the display instead of Flutter's portrait lock. The continuous detector/mapping is ported, while its output adapter changes from ListView's ticker to 100ms bounded touch strokes. Native pause/lock releases camera and explicit visible Resume replaces automatic foreground resumption. The baseline migration used open-hand rearm; the [native tap extension](tap-gestures.md) now reserves open hand for one pause tap per presentation and maps thumbs-up to double tap. Native rearming uses only a configurable elapsed-time delay and fresh confirmation, with no open/closed-hand requirement. Original rearm behavior remains a tested pure-domain compatibility option with taps disabled. See [parity guide](gesture-parity.md).
 
 ## Validation evidence
 
@@ -73,7 +73,7 @@ No sustained camera benchmark, thermal/battery run, accuracy trial or Flutter/na
 ## Next acceptance steps
 
 1. Complete manual permission onboarding and camera-free forward/backward validation; record dispatch separately from observed content change.
-2. Execute the [device trial matrix](device-validation.md), including20 pointing trials per direction, 20 flicks per direction, 20 neutral/jitter trials, held-pose no-repeat, release, tracking loss, rotation and rapid lifecycle commands.
+2. Execute the [device trial matrix](device-validation.md), including20 pointing trials per direction, 20 flicks per direction, 20 neutral/jitter trials, timed pose repetition, open-hand tap debounce, delay persistence, tracking loss, rotation and rapid lifecycle commands.
 3. Repeat on a newer device/API 34+ and a limited-performance device with equivalent settings. Record actual inference/gesture latency, CPU/memory,20 minute thermal/battery use and target compatibility.
 4. Resolve measured failures without rewriting goldens to hide behavior changes. Retire the Flutter variant only after applicable native acceptance gates pass, preserving behavioral fixtures/history.
 5. Prepare signed release and required store disclosures/declarations only after device acceptance.

@@ -2,11 +2,12 @@ package dev.autoscroll.nativeapp.gesture
 
 import kotlin.math.cos
 import kotlin.math.sin
+import kotlin.math.PI
 import org.junit.Assert.*
 import org.junit.Test
 
 class TapGestureTest {
-    private val config = HandPoseDetectionConfig(tapGesturesEnabled = true)
+    private val config = HandPoseDetectionConfig(tapGesturesEnabled = true, rearmMode = HandPoseRearmMode.TIMED)
 
     private fun points(pose: RecognizedHandPose, rotation: Double = 0.0, mirror: Boolean = false,
         scale: Double = 1.0, xOffset: Double = 0.5, yOffset: Double = 0.5): MutableList<HandLandmark> {
@@ -19,16 +20,17 @@ class TapGestureTest {
         for ((mcp, x, y) in listOf(Triple(5, -0.065, -0.06), Triple(9, -0.02, -0.07),
             Triple(13, 0.03, -0.06), Triple(17, 0.075, -0.04))) {
             val extended = pose == RecognizedHandPose.NEUTRAL ||
-                (mcp == 5 && pose == RecognizedHandPose.POINTING_UP)
+                (mcp == 5 && (pose == RecognizedHandPose.POINTING_UP || pose == RecognizedHandPose.POINTING_DOWN))
             p[mcp] = x to y
             p[mcp + 1] = x to y - 0.085
             p[mcp + 2] = if (extended) x to y - 0.16 else x + 0.05 to y - 0.085
             p[mcp + 3] = if (extended) x to y - 0.22 else x + 0.05 to y - 0.035
         }
+        val angle = rotation + if (pose == RecognizedHandPose.POINTING_DOWN) PI else 0.0
         return p.mapIndexed { i, (x, y) ->
             val mirroredX = if (mirror) -x else x
-            HandLandmark(i, xOffset + scale * (mirroredX * cos(rotation) - y * sin(rotation)),
-                yOffset + scale * (mirroredX * sin(rotation) + y * cos(rotation)), 0.0)
+            HandLandmark(i, xOffset + scale * (mirroredX * cos(angle) - y * sin(angle)),
+                yOffset + scale * (mirroredX * sin(angle) + y * cos(angle)), 0.0)
         }.toMutableList()
     }
 
@@ -72,37 +74,73 @@ class TapGestureTest {
         assertNotEquals(thumb, classifier.classify(points(thumb, 1.0), thumb))
     }
 
-    @Test fun openHandAndThumbRequireConfirmationAndNeverRepeatEvenInLegacyStableMode() {
-        for (pose in listOf(RecognizedHandPose.NEUTRAL, RecognizedHandPose.THUMBS_UP)) {
-            val detector = HandPoseDetector(config.copy(rearmMode = HandPoseRearmMode.STABLE_POSE))
-            val events = hold(detector, pose, 0L..5000L step 100)
-            assertEquals(listOf(PoseEvent(pose, 200)), events)
-            assertEquals(HandPosePhase.LATCHED, detector.phase)
+    @Test fun heldPointingAndThumbRepeatAfterTimeAndFreshConfirmationWithoutAnyReleasePose() {
+        for (pose in listOf(RecognizedHandPose.POINTING_UP, RecognizedHandPose.POINTING_DOWN, RecognizedHandPose.THUMBS_UP)) {
+            val events = hold(HandPoseDetector(config), pose, 0L..1800L step 100)
+            assertEquals(listOf(200L, 900L, 1600L), events.map { it.timestampMs })
+            assertTrue(events.all { it.pose == pose })
         }
     }
 
-    @Test fun closingHandRearmsTapButBriefReleaseAndTrackingLossDoNot() {
-        for (pose in listOf(RecognizedHandPose.NEUTRAL, RecognizedHandPose.THUMBS_UP)) {
+    @Test fun configuredDelayControlsRepeatIntervalAndCannotBeShortenedByOpenOrClosedHand() {
+        val pointing = RecognizedHandPose.POINTING_UP
+        for ((delay, expected) in listOf(300L to listOf(100L, 500L, 900L, 1300L, 1700L),
+            1000L to listOf(100L, 1200L))) {
+            val detector = HandPoseDetector(config.copy(cooldownMs = delay, confirmationDurationMs = 100))
+            assertEquals(expected, hold(detector, pointing, 0L..1800L step 50).map { it.timestampMs })
+        }
+        for (release in listOf(RecognizedHandPose.NEUTRAL, RecognizedHandPose.CLOSED_HAND)) {
             val detector = HandPoseDetector(config)
-            assertEquals(1, hold(detector, pose, 0L..200L step 100).size)
-            detector.process(HandTrackingResult(300))
-            assertTrue(hold(detector, pose, 400L..600L step 100).isEmpty())
-            detector.process(sample(700, RecognizedHandPose.CLOSED_HAND))
-            assertTrue(hold(detector, pose, 800L..1000L step 100).isEmpty())
-            assertTrue(hold(detector, RecognizedHandPose.CLOSED_HAND, 1100L..1300L step 100).isEmpty())
-            assertEquals(HandPosePhase.READY, detector.phase)
-            assertEquals(listOf(PoseEvent(pose, 1600)), hold(detector, pose, 1400L..1600L step 100))
+            assertEquals(1, hold(detector, pointing, 0L..200L step 100).size)
+            assertTrue(hold(detector, release, 300L..600L step 100).isEmpty())
+            assertEquals(HandPosePhase.LATCHED, detector.phase)
+            assertEquals(50L, detector.cooldownRemainingMs)
         }
     }
 
-    @Test fun openHandAfterPointingIsATapAndCanThenChangeToThumbOnce() {
+    @Test fun timerRearmsWithoutAHandAndAllowsDirectDirectionChangeAfterFreshConfirmation() {
         val detector = HandPoseDetector(config)
-        assertEquals(RecognizedHandPose.POINTING_UP, hold(detector, RecognizedHandPose.POINTING_UP, 0L..200L step 100).single().pose)
+        hold(detector, RecognizedHandPose.POINTING_UP, 0L..200L step 100)
+        assertNull(detector.process(HandTrackingResult(649)))
+        assertEquals(HandPosePhase.LATCHED, detector.phase)
+        assertEquals(1L, detector.cooldownRemainingMs)
+        assertNull(detector.process(HandTrackingResult(650)))
+        assertEquals(HandPosePhase.READY, detector.phase)
+        assertEquals(0L, detector.cooldownRemainingMs)
+        assertEquals(listOf(PoseEvent(RecognizedHandPose.POINTING_DOWN, 900)),
+            hold(detector, RecognizedHandPose.POINTING_DOWN, 700L..900L step 100))
+        val direct = HandPoseDetector(config)
+        hold(direct, RecognizedHandPose.POINTING_UP, 0L..200L step 100)
+        assertEquals(listOf(PoseEvent(RecognizedHandPose.POINTING_DOWN, 900)),
+            hold(direct, RecognizedHandPose.POINTING_DOWN, 300L..900L step 100))
+    }
+
+    @Test fun openHandIsOnePauseTapPerPresentationEvenAfterDelayOrTrackingLoss() {
+        val open = RecognizedHandPose.NEUTRAL
+        val detector = HandPoseDetector(config)
+        assertEquals(listOf(PoseEvent(open, 200)), hold(detector, open, 0L..5000L step 100))
+        detector.process(HandTrackingResult(5100))
+        assertTrue(hold(detector, open, 5200L..6000L step 100).isEmpty())
+        assertTrue(detector.suppressesContinuous)
+        detector.process(sample(6100, RecognizedHandPose.CLOSED_HAND))
+        assertEquals(listOf(PoseEvent(open, 6400)), hold(detector, open, 6200L..6400L step 100))
+    }
+
+    @Test fun openHandAfterPointingOnlyTapsAndNeverRearmsBeforeTheDelay() {
+        val detector = HandPoseDetector(config)
+        hold(detector, RecognizedHandPose.POINTING_UP, 0L..200L step 100)
         assertEquals(listOf(PoseEvent(RecognizedHandPose.NEUTRAL, 900)),
-            hold(detector, RecognizedHandPose.NEUTRAL, 300L..900L step 100))
-        assertEquals(listOf(PoseEvent(RecognizedHandPose.THUMBS_UP, 1600)),
-            hold(detector, RecognizedHandPose.THUMBS_UP, 1000L..1600L step 100))
-        assertTrue(hold(detector, RecognizedHandPose.THUMBS_UP, 1700L..3000L step 100).isEmpty())
+            hold(detector, RecognizedHandPose.NEUTRAL, 300L..1500L step 100))
+        assertEquals(HandPosePhase.READY, detector.phase)
+        assertEquals(listOf(PoseEvent(RecognizedHandPose.THUMBS_UP, 1800)),
+            hold(detector, RecognizedHandPose.THUMBS_UP, 1600L..1800L step 100))
+    }
+
+    @Test fun nativeTapConfigRejectsZeroDelayAndPoseBasedRearm() {
+        assertThrows(IllegalArgumentException::class.java) { HandPoseDetector(config.copy(cooldownMs = 0)) }
+        for (mode in listOf(HandPoseRearmMode.OPEN_HAND, HandPoseRearmMode.STABLE_POSE)) {
+            assertThrows(IllegalArgumentException::class.java) { HandPoseDetector(config.copy(rearmMode = mode)) }
+        }
     }
 
     @Test fun gapsDuplicateTimesAndUnknownPosesDiscardTapEvidence() {
@@ -119,7 +157,8 @@ class TapGestureTest {
         assertNotNull(detector.process(sample(1000, RecognizedHandPose.THUMBS_UP)))
         val collapsed = MutableList(21) { HandLandmark(it, 0.5, 0.5, 0.0) }
         for (ms in 1100L..1600L step 100) detector.process(HandTrackingResult(ms, HandPose(collapsed)))
-        assertTrue(hold(detector, RecognizedHandPose.THUMBS_UP, 1700L..2000L step 100).isEmpty())
+        assertEquals(listOf(PoseEvent(RecognizedHandPose.THUMBS_UP, 1900)),
+            hold(detector, RecognizedHandPose.THUMBS_UP, 1700L..2000L step 100))
     }
 
     @Test fun poseTapsOwnHybridOutputAndCompatibilityReplayKeepsOpenHandNeutral() {

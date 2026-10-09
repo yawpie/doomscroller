@@ -13,7 +13,7 @@ data class NativeSettings(
     val tracking: TrackingConfig = TrackingConfig(),
     val motion: MotionDetectionConfig = MotionDetectionConfig(),
     val flick: FlickDetectionConfig = FlickDetectionConfig(),
-    val pose: HandPoseDetectionConfig = HandPoseDetectionConfig(tapGesturesEnabled = true),
+    val pose: HandPoseDetectionConfig = HandPoseDetectionConfig(tapGesturesEnabled = true, rearmMode = HandPoseRearmMode.TIMED),
     val scroll: ScrollConfig = ScrollConfig(),
     val swipeDurationMs: Long = 220,
     val swipeDistance: Double = 0.5,
@@ -42,8 +42,8 @@ class SettingsStore(context: Context) {
             ),
             pose = HandPoseDetectionConfig(
                 tapGesturesEnabled = true,
+                rearmMode = HandPoseRearmMode.TIMED,
                 confirmationDurationMs = number("poseConfirm", 180.0).toLong(),
-                releaseDurationMs = number("poseRelease", 180.0).toLong(),
                 cooldownMs = number("poseCooldown", 450.0).toLong(),
                 minimumIndexAngle = number("indexAngle", 160.0),
                 maximumCurledAngle = number("curledAngle", 110.0),
@@ -55,6 +55,7 @@ class SettingsStore(context: Context) {
             swipeDistance = number("swipeDistance", 0.5),
         ).also {
             require(it.swipeDurationMs in 100..1000 && it.swipeDistance in 0.1..0.8)
+            require(it.pose.cooldownMs in 200..3000)
             FlickDetector(it.flick)
             HandPoseDetector(it.pose)
         }
@@ -66,6 +67,7 @@ class SettingsStore(context: Context) {
 
     fun update(settings: NativeSettings) {
         require(settings.swipeDurationMs in 100..1000 && settings.swipeDistance in 0.1..0.8)
+        require(settings.pose.cooldownMs in 200..3000)
         mutable.value = settings
         preferences.edit().apply {
             putString("mode", settings.mode.name)
@@ -81,7 +83,6 @@ class SettingsStore(context: Context) {
                 "flickCooldown" to settings.flick.cooldownMs.toDouble(),
                 "flickRearm" to settings.flick.rearmDurationMs.toDouble(),
                 "poseConfirm" to settings.pose.confirmationDurationMs.toDouble(),
-                "poseRelease" to settings.pose.releaseDurationMs.toDouble(),
                 "poseCooldown" to settings.pose.cooldownMs.toDouble(),
                 "indexAngle" to settings.pose.minimumIndexAngle,
                 "curledAngle" to settings.pose.maximumCurledAngle,

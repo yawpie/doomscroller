@@ -96,7 +96,7 @@ class GestureSafetyTest {
         assertThrows(IllegalArgumentException::class.java) { ExponentialPositionSmoother(Double.NaN) }
     }
 
-    @Test fun nativePoseDefaultRequiresExplicitNeutralAndNeverRepeatsHeldPose() {
+    @Test fun legacyPoseModeRequiresExplicitNeutralAndNeverRepeatsHeldPose() {
         val detector = HandPoseDetector()
         val events = (0L..4000L step 100).mapNotNull { detector.process(sample(it, RecognizedHandPose.POINTING_DOWN)) }
         assertEquals(1, events.size)

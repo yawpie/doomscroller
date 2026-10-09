@@ -12,11 +12,12 @@ Then Start from the visible dashboard, wait for Active, switch to the feed. Tap/
 
 | Group | Trials / expected evidence |
 | --- | --- |
-| Point up |20 deliberate confirmations; one backward action per pose; no repeat while held 5 seconds |
-| Point down |20 deliberate confirmations; one forward action per pose |
-| Rearm |20 closed-hand release/repoint cycles; direct up/down switching cannot rearm; tracking loss does not count as release; open hand after pointing must produce one single tap |
+| Point up |20 deliberate confirmations; backward actions repeat only after the configured delay and fresh confirmation while held 5 seconds |
+| Point down |20 deliberate confirmations; forward actions repeat only after the configured delay and fresh confirmation |
+| Rearm |20 repetitions using time only, including held poses, direct up/down changes and no hand during the delay; open/closed hands cannot shorten the interval; reacquisition needs fresh confirmation |
+| Rearm settings |Move the 200–3000ms slider, compare action intervals including confirmation time, relaunch and verify the saved duration |
 | Open hand |20 confirmations per hand in HYBRID/POSE; one center single tap; no repeat while held 5 seconds; independently observe pause/play toggle in supporting feeds |
-| Thumbs-up |20 confirmations per hand; one center double tap; test wrist rotation, curled thumb, partial visibility and non-curled fingers; no repeat while held 5 seconds |
+| Thumbs-up |20 confirmations per hand; center double taps repeat only after the delay and fresh confirmation; test wrist rotation, curled thumb, partial visibility and non-curled fingers |
 | Flick |20 per direction; cooldown+settlement before another flick |
 | Unknown/jitter |20 malformed/partial/noisy pose trials with no unintended discrete action; open hand is now an intentional single-tap pose |
 | Continuous |stationary calibration, slow up/down, reversal, idle, loss and reacquisition; measure touch threshold in each target app |
