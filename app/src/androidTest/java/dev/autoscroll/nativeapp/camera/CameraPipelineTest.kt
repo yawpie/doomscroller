@@ -104,6 +104,28 @@ class CameraPipelineTest {
         assertNull(expired.pose)
     }
 
+    @Test fun previewSurvivesInferenceAndExpiresWithItsLandmarks() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val source = instrumentationFixture()
+        val preview = source.copy(Bitmap.Config.ARGB_8888, false)
+        val engine = HandLandmarkerEngine(instrumentation.targetContext, TrackingConfig())
+        try {
+            val pose = engine.detect(source, 100)
+            assertTrue(source.isRecycled)
+            assertFalse(preview.isRecycled)
+            assertTrue(preview.getPixel(preview.width / 2, preview.height / 2) != 0)
+            val sample = CameraController.FrameResult(pose,
+                InferenceMetrics(inputTimestampMs = 100, completionTimestampMs = 280), preview)
+            assertEquals(preview, sample.previewAt(nowMs = 599, lostAfterMs = 500))
+            assertNull(sample.previewAt(nowMs = 600, lostAfterMs = 500))
+            assertNull(sample.resultAt(nowMs = 600, lostAfterMs = 500).pose)
+        } finally {
+            engine.close()
+            if (!source.isRecycled) source.recycle()
+            preview.recycle()
+        }
+    }
+
     @Test fun rollingLatencySummaryIsBoundedAndUsesNearestRankPercentiles() {
         val window = LatencyWindow()
         assertEquals(0, window.summary().samples)

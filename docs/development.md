@@ -38,6 +38,14 @@ On Unix use `bash ./gradlew` with the same tasks. CI runs that command on every 
 and pull request. Release APKs are unsigned; signing is a separate distribution
 step. Instrumentation compilation is not device execution.
 
+`android-publish.yml` tests, lints and builds a new unsigned release APK on each
+push to `main` and each pull request opened, reopened or updated against `main`.
+Every successful run uploads an APK artifact with a unique run/attempt version.
+Main pushes also create a GitHub Release; same-repository pull requests create
+prereleases. Fork and Dependabot pull requests upload artifacts only because
+their tokens cannot create releases. Publishing runs do not cancel or replace
+one another.
+
 On an explicitly selected test device/emulator:
 
 ```powershell

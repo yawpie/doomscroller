@@ -48,7 +48,11 @@ configured rearm delay and fresh confirmation. CONTINUOUS/FLICK preserve their
 movement controls. The illustrated cards in Gestures explain the current mode and
 repeats. Tap video sends a center tap; Pause tracking releases the camera.
 Gestures → Practice safely uses saved recognition settings with a local sample
-feed and live feedback. It needs camera access only. Start practice is explicit;
+feed and live feedback. A mirrored camera preview and live feedback stay pinned
+while the controls, sample feed and instructions scroll. Show hand tracking toggles
+the landmark overlay without stopping recognition. The preview uses the same
+upright frames and saved inference rate as recognition; no frames are recorded.
+It needs camera access only. Start practice is explicit;
 entry pauses external tracking and cancels pending manual tests. Leaving, locking,
 backgrounding or recreation releases its camera and never restarts it automatically.
 Return to Home and press Start / Resume to control another app again. Practice

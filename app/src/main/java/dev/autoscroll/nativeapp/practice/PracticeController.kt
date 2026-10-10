@@ -1,9 +1,11 @@
 package dev.autoscroll.nativeapp.practice
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.os.SystemClock
 import androidx.lifecycle.LifecycleOwner
 import dev.autoscroll.nativeapp.camera.CameraController
+import dev.autoscroll.nativeapp.gesture.HandLandmark
 import dev.autoscroll.nativeapp.session.GestureSessionState
 import dev.autoscroll.nativeapp.session.SessionMachine
 import dev.autoscroll.nativeapp.session.SessionStore
@@ -21,6 +23,8 @@ internal data class PracticeState(
     val session: GestureSessionState = GestureSessionState.Stopped,
     val sample: PracticeSample = PracticeSample(),
     val message: String? = null,
+    val preview: Bitmap? = null,
+    val landmarks: List<HandLandmark> = emptyList(),
 )
 
 /** Activity/main-thread owned; disposed when its screen is left or Activity stops. */
@@ -61,11 +65,13 @@ internal class PracticeController(
                         if (canReceive(token)) {
                             machine.ready(token)
                             lastResultMs = SystemClock.elapsedRealtime()
-                            mutableState.value = PracticeState(machine.state, local.process(result))
+                            mutableState.value = PracticeState(machine.state, local.process(result),
+                                landmarks = result.pose?.landmarks.orEmpty())
                         }
                     },
                     onMetrics = {},
                     onError = { error -> if (canReceive(token)) fail(practiceFailureMessage(error)) },
+                    onPreview = { bitmap -> if (canReceive(token)) mutableState.value = mutableState.value.copy(preview = bitmap) },
                 )
                 camera = controller
                 controller.start(owner)

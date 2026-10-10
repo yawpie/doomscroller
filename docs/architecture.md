@@ -31,6 +31,17 @@ five local sample cards, a playback toggle and double-tap count. It never create
 ScrollActionCoordinator, AccessibilityScrollAdapter or an external executor.
 Movement is a local demonstration, not target-feed calibration.
 
+Practice alone requests a preview from CameraController. The existing bounded
+worker copies the upright inference pixels before MediaPipe recycles its input,
+then coalesces the image and landmarks in the same latest-result slot. Both expire
+with the same freshness guard. Display bitmaps are GC-owned so Compose cannot
+draw an explicitly recycled image; Stop, failure and the watchdog clear the
+practice preview. External service sessions allocate no preview images.
+The fixed camera panel mirrors the image once; landmarks already use the domain's
+selfie coordinates and are fitted into the same letterbox. The saveable Show hand
+tracking switch hides only the drawing. Camera and live feedback stay fixed,
+side by side on wide screens; all other practice content scrolls below them.
+
 Entry reserves practice ownership in SessionStore before awaiting work. If the
 service exists, an explicit preparation command acknowledges only after
 releaseSession has published its worker teardown. Practice waits for that

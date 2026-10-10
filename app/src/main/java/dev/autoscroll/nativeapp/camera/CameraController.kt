@@ -42,6 +42,7 @@ class CameraController(
     private val onResult: (HandTrackingResult) -> Unit,
     private val onMetrics: (InferenceMetrics) -> Unit,
     private val onError: (Throwable) -> Unit,
+    private val onPreview: ((Bitmap?) -> Unit)? = null,
 ) : AutoCloseable {
     private val context = context.applicationContext
     private val main = Handler(Looper.getMainLooper())
@@ -83,9 +84,11 @@ class CameraController(
     private var cleanupComplete = false
     private val closeCallbacks = mutableListOf<() -> Unit>()
 
-    internal data class FrameResult(val pose: HandPose?, val metrics: InferenceMetrics) {
+    internal data class FrameResult(val pose: HandPose?, val metrics: InferenceMetrics, val preview: Bitmap? = null) {
         fun resultAt(nowMs: Long, lostAfterMs: Long) = HandTrackingResult(metrics.inputTimestampMs,
             if (nowMs - metrics.inputTimestampMs < lostAfterMs) pose else null)
+        fun previewAt(nowMs: Long, lostAfterMs: Long) =
+            preview?.takeIf { nowMs - metrics.inputTimestampMs < lostAfterMs }
     }
 
     @MainThread
@@ -168,6 +171,9 @@ class CameraController(
                 frame.planes.map { YuvFrame.Plane(it.buffer, it.rowStride, it.pixelStride) },
                 sample, frame.imageInfo.rotationDegrees)
             val bitmap = Bitmap.createBitmap(argb.pixels, argb.width, argb.height, Bitmap.Config.ARGB_8888)
+            // MediaPipe recycles its input; practice displays a separate, GC-owned bitmap.
+            val preview = if (onPreview != null)
+                Bitmap.createBitmap(argb.pixels, argb.width, argb.height, Bitmap.Config.ARGB_8888) else null
             val pose = try {
                 checkNotNull(engine).detect(bitmap, inputNs / 1_000_000)
             } finally {
@@ -197,7 +203,7 @@ class CameraController(
             pendingResult.set(FrameResult(if (stale) null else pose,
                 InferenceMetrics(cameraFps, inferenceFps, latencyMs, frame.imageInfo.timestamp,
                     inputNs / 1_000_000, completionMs, throttledFrames, processedFrames, staleFrames,
-                    latencySummary.average, latencySummary.p50, latencySummary.p95, latencySummary.samples)))
+                    latencySummary.average, latencySummary.p50, latencySummary.p95, latencySummary.samples), preview))
             postDelivery()
         } catch (error: Exception) {
             fail(error)
@@ -215,6 +221,7 @@ class CameraController(
             if (!closed && sample != null) {
                 val now = SystemClock.elapsedRealtime()
                 onResult(sample.resultAt(now, config.lostAfterMs))
+                if (!closed) onPreview?.invoke(sample.previewAt(now, config.lostAfterMs))
                 if (!closed && (lastMetricsMs == 0L || now - lastMetricsMs >= 1000)) {
                     lastMetricsMs = now
                     onMetrics(sample.metrics)
