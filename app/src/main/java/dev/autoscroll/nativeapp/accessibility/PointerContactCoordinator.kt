@@ -73,6 +73,13 @@ internal class PointerContactCoordinator(
     private fun submit(segment: PointerSegment): ScrollExecutionResult? {
         operation = segment
         update(state.copy(dispatching = true))
+        if (state.ending && segment.kind != PointerSegmentKind.END) {
+            operation = null
+            if (segment.kind == PointerSegmentKind.BEGIN)
+                update(PointerContactState(position = segment.start, lastResult = terminalResult))
+            else drain()
+            return ScrollExecutionResult.REJECTED
+        }
         val rejection = dispatch(segment) { finish(segment, it, submitted = true) }
         if (rejection != null) finish(segment, rejection, submitted = false)
         return rejection

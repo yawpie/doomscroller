@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - main
+      - develop
   pull_request:
     branches:
       - main
+      - develop
 
 permissions:
   contents: read
@@ -34,4 +36,3 @@ jobs:
 
       - name: Test, lint and build
         run: bash ./gradlew :gesture:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease :app:assembleDebugAndroidTest
-

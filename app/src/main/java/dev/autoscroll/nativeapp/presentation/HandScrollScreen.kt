@@ -55,6 +55,9 @@ internal fun HandScrollScreen(
     pointerConsent: Boolean = false,
     pointerCalibrated: Boolean = false,
     onPointerConsent: () -> Unit = {},
+    pointerContactActive: Boolean = false,
+    pointerRecoveryRequired: Boolean = false,
+    onPointerRecovery: () -> Unit = {},
 ) {
     var page by rememberSaveable { mutableStateOf("Home") }
     var disclosure by rememberSaveable { mutableStateOf(false) }
@@ -89,6 +92,15 @@ internal fun HandScrollScreen(
                                 Text(status(state), style = MaterialTheme.typography.titleLarge)
                                 Text("Control mode: ${if (pointerMode) "Pointer" else "Scroll"}")
                                 Text(if (ready) "Ready to use" else "Finish the required setup below")
+                                if (pointerRecoveryRequired) {
+                                    Text("Touch release could not be confirmed", style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.error)
+                                    Text("Touch the screen with your finger to clear any held contact. Then acknowledge below. Tracking stays stopped; Pointer needs a fresh calibration and a separate Start.")
+                                    OutlinedButton(onClick = onPointerRecovery,
+                                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("I touched the screen · clear recovery") }
+                                } else if (pointerContactActive && state != GestureSessionState.Active) {
+                                    Text("The previous touch is ending. Wait for it to finish, then press Start again.")
+                                }
                                 if (pointerMode && state != GestureSessionState.Active && state != GestureSessionState.Starting) {
                                     Text(if (pointerCalibrated) "Practice calibration is ready for one new Start."
                                         else "Calibrate in Practice, then choose Use calibration. Return here and press Start explicitly.")
@@ -101,7 +113,8 @@ internal fun HandScrollScreen(
                                 }
                                 if (state is GestureSessionState.Error) Text(state.reason, color = MaterialTheme.colorScheme.error)
                                 Button(onClick = { if (state == GestureSessionState.Active) onPause() else onStart() },
-                                    enabled = state != GestureSessionState.Starting && (state == GestureSessionState.Active || ready),
+                                    enabled = state != GestureSessionState.Starting && (state == GestureSessionState.Active ||
+                                        ready && !pointerContactActive && !pointerRecoveryRequired),
                                     modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
                                     Text(when (state) {
                                         GestureSessionState.Active -> "Pause tracking"
@@ -182,7 +195,7 @@ internal fun HandScrollScreen(
                         if (pointerMode) {
                             Text("Calibrate two comfortable corners in Practice with the screen buttons, then choose Use calibration. Home Start is always a separate action.")
                             Text("Extend your index finger to aim. Pinch thumb and index finger to press; keep pinched to hold; move while pinched to drag; separate to release. Start with fingers separated and a steady hand.")
-                            Text("The cursor hides on tracking loss, your floating controls, Scroll Vision, screen lock and blocked apps. A target-app change cancels the current gesture. Reacquire with separated fingers; never resume a held pinch automatically.")
+                            Text("The cursor hides on tracking loss, your floating controls, Scroll Vision, screen lock and blocked apps. A target-app change requests release of the current touch. Reacquire with separated fingers; never resume a held pinch automatically.")
                         } else {
                         if (settings.mode == GestureMode.HYBRID || settings.mode == GestureMode.POSE) {
                             GestureCard(if (settings.inverted) "Previous item" else "Next item", HandDrawing.DOWN,
@@ -250,7 +263,7 @@ internal fun HandScrollScreen(
         title = { Text(if (pointerMode) "Allow pointer controlled screen actions" else "Allow gesture controlled screen actions") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                Text(if (pointerMode) "Scroll Vision uses Android Accessibility to send a touch at the pointer cursor: pinch to press, keep pinched to hold, move while pinched to drag, and separate to release. A short press becomes a tap. Other apps decide how these touches behave. It receives only the current app's package name to block unsafe targets; it does not read screen content, text or passwords. Touches may interrupt manual input. Pause, Stop, tracking loss, lock or an app change ends the gesture; an already submitted segment may finish first, and a target's long-press action cannot always be undone. Camera images stay on your device. You can pause, stop or disable the service in Android Settings at any time."
+                Text(if (pointerMode) "Scroll Vision uses Android Accessibility to send a touch at the pointer cursor: pinch to press, keep pinched to hold, move while pinched to drag, and separate to release. A short press becomes a tap. Other apps decide how these touches behave. It receives only the current app's package name to block unsafe targets; it does not read screen content, text or passwords. Touches may interrupt manual input. Pause, Stop, tracking loss, lock or an app change requests release; an already submitted segment may finish first. Releasing a short touch can still activate its target, and a long-press action cannot always be undone. If release cannot be confirmed, new actions stop: touch the screen manually, acknowledge recovery in Home, then recalibrate and explicitly Start. Camera images stay on your device. You can pause, stop or disable the service in Android Settings at any time."
                     else "Scroll Vision uses Android Accessibility to send vertical swipes, center single taps, and center double taps requested by your hand gestures or external test buttons in other apps. It receives only the current app's package name to block unsafe targets. It does not read screen content, text, or passwords. Actions may interrupt an ongoing touch. You can pause, stop, or disable the service in Android Settings at any time.")
             }
         },

@@ -34,8 +34,8 @@ From the repository root on Windows:
 .\gradlew.bat :gesture:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease :app:assembleDebugAndroidTest
 ```
 
-On Unix use `bash ./gradlew` with the same tasks. CI runs that command on every push
-and pull request. Release APKs are unsigned; signing is a separate distribution
+On Unix use `bash ./gradlew` with the same tasks. Verification CI runs that command
+on pushes and pull requests to `main` and `develop`. Release APKs are unsigned; signing is a separate distribution
 step. Instrumentation compilation is not device execution.
 
 `android-publish.yml` tests, lints and builds a new unsigned release APK on each
@@ -85,3 +85,13 @@ Before committing, inspect `git diff --check` and ensure models, test images,
 signing keys, SDK paths, build outputs and local logs have the correct ownership.
 Only the bundled licensed model belongs in the production APK; test images and
 goldens do not. Never commit `local.properties` or signing credentials.
+
+Pointer ownership stays in the same modules: pure PointerDetector/PointerCalibration
+in `:gesture`, local PointerPracticeFeedback in the Activity, shared content bounds
+and contact ownership in `accessibility`, and the small service-owned cursor in
+`overlay`. PointerContactCoordinator callbacks must survive camera cancellation;
+terminal release bypasses begin/move guards and pre-submission listeners may abort
+before any new DOWN or MOVE. Do not send stationary continuation heartbeats or
+replacement taps. Keep one active segment and one replaceable pending point.
+Review [pointer validation](pointer-validation.md) for executed test evidence and
+the physical camera, real-app and performance acceptance still outstanding.

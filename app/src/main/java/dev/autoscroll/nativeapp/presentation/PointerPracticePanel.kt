@@ -24,7 +24,7 @@ import kotlin.math.roundToInt
 
 @Composable
 internal fun PointerPracticePanel(sample: PracticePointerSample, active: Boolean, capture: () -> Unit,
-    reset: () -> Unit, use: () -> Unit, sizeChanged: (Int, Int, Double) -> Unit) {
+    reset: () -> Unit, use: () -> Unit, sizeChanged: (Int, Int, Double) -> Unit, openBoard: () -> Unit) {
     Text("Pointer practice", style = MaterialTheme.typography.titleLarge)
     Text(sample.calibrationMessage)
     if (sample.area == null) {
@@ -34,6 +34,9 @@ internal fun PointerPracticePanel(sample: PracticePointerSample, active: Boolean
         }
         Text("Use the screen button with your other hand. Keep thumb and index separate; no pinch is needed for calibration.")
     } else {
+        Button(onClick = openBoard, enabled = active, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+            Text("Open practice board")
+        }
         Button(onClick = use, enabled = active, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
             Text("Use calibration")
         }
@@ -43,25 +46,36 @@ internal fun PointerPracticePanel(sample: PracticePointerSample, active: Boolean
     Text("Tap grid · Hold center for 600 ms", style = MaterialTheme.typography.titleMedium)
     Text("Pinch and move to drag", style = MaterialTheme.typography.titleMedium)
     Text("Move the square to Drop, then separate your fingers. Hold before moving to practice long press then drag.")
+    PointerPracticeBoard(sample, sizeChanged, Modifier.fillMaxWidth().height(380.dp))
+    Text("Tap hits: ${sample.taps} · Hold hits: ${sample.holds} · Drops: ${sample.drops} · Misses: ${sample.misses}")
+    Text("Center hold: ${sample.holdMs} ms · ${sample.lastResult}")
+    Text("Tracking loss cancels the local touch. Leaving, locking, rotating, or stopping clears calibration. Other apps decide their own long press and drag timing.")
+}
+
+@Composable
+internal fun PointerPracticeBoard(sample: PracticePointerSample, sizeChanged: (Int, Int, Double) -> Unit, modifier: Modifier) {
     val density = LocalDensity.current
     val targetPixels = with(density) { 48.dp.toPx().toDouble() }
     val colors = MaterialTheme.colorScheme
-    BoxWithConstraints(Modifier.fillMaxWidth().height(380.dp).clipToBounds()
+    BoxWithConstraints(modifier.clipToBounds()
         .background(colors.surfaceContainer).onSizeChanged { sizeChanged(it.width, it.height, targetPixels) }
         .semantics { contentDescription = "Local pointer practice board" }) {
         val width = with(density) { maxWidth.toPx() }
         val height = with(density) { maxHeight.toPx() }
-        @Composable fun Target(point: PointerPoint, text: String, filled: Boolean = false) {
+        @Composable fun Target(point: PointerPoint, text: String, description: String, filled: Boolean = false) {
             Box(Modifier.offset { IntOffset((point.x * width - targetPixels / 2).roundToInt(),
                 (point.y * height - targetPixels / 2).roundToInt()) }.size(48.dp)
+                .semantics { contentDescription = description }
                 .background(if (filled) colors.primaryContainer else colors.surface)
                 .border(2.dp, colors.outline), contentAlignment = Alignment.Center) {
-                Text(text, color = if (filled) colors.onPrimaryContainer else colors.onSurface)
+                Text(text, style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.wrapContentSize(unbounded = true), softWrap = false,
+                    color = if (filled) colors.onPrimaryContainer else colors.onSurface)
             }
         }
-        PointerPracticeFeedback.targets.forEachIndexed { index, point -> Target(point, if (index == 4) "Hold" else "${index + 1}") }
-        Target(PointerPracticeFeedback.dropTarget, "Drop")
-        Target(sample.objectPosition, "Drag", true)
+        PointerPracticeFeedback.targets.forEachIndexed { index, point -> Target(point, if (index == 4) "Hold" else "${index + 1}", "Pointer target ${index + 1}") }
+        Target(PointerPracticeFeedback.dropTarget, "Drop", "Drop zone")
+        Target(sample.objectPosition, "Drag", "Drag object", true)
         if (sample.feedback.visible) sample.feedback.position?.let { point ->
             val contact = sample.feedback.phase in listOf(PointerPhase.PRESSED, PointerPhase.DRAGGING, PointerPhase.RELEASING)
             Canvas(Modifier.fillMaxSize().semantics { contentDescription = "Local pointer cursor" }) {
@@ -71,9 +85,6 @@ internal fun PointerPracticePanel(sample: PracticePointerSample, active: Boolean
             }
         }
     }
-    Text("Tap hits: ${sample.taps} · Hold hits: ${sample.holds} · Drops: ${sample.drops} · Misses: ${sample.misses}")
-    Text("Center hold: ${sample.holdMs} ms · ${sample.lastResult}")
-    Text("Tracking loss cancels the local touch. Leaving, locking, rotating, or stopping clears calibration. Other apps decide their own long press and drag timing.")
 }
 
 internal fun pointerPhaseLabel(phase: PointerPhase) = when (phase) {

@@ -1,6 +1,8 @@
 # Rencana fitur pointer melalui finger tracking
 
-Tanggal: 10 Oktober 2026. Status: rencana, belum diimplementasikan atau diuji di perangkat.
+Tanggal: 10 Oktober 2026. Status: rencana implementasi P1–P4 dikerjakan di branch
+`codex/finger-pointer`; lihat [receipt implementasi dan validasi](../pointer-validation.md).
+Penerimaan kamera fisik, aplikasi nyata dan performa tetap belum diverifikasi.
 
 ## 1. Tujuan dan batas versi pertama
 
@@ -98,7 +100,7 @@ Kerjakan sebagai perubahan kecil terpisah. Jangan mengoptimasi kamera, menaikkan
 
 **Instrumentasi:** view kursor tidak menangkap tap; koordinat render sama dengan titik tap pada test activity; titik di widget ditolak; content insets dan rotasi; pause/stop/disconnect; kehilangan izin; practice tidak mengirim aksi eksternal. Periksa conditional skips dan gunakan perangkat uji eksplisit, tanpa mengubah izin perangkat pribadi secara otomatis.
 
-**Khusus hold dan drag:** unit test begin sekali, release sekali, hold lama tanpa repeated down, hysteresis/gap, startup sudah pinch, release saat busy, offset pinch tanpa loncatan, jitter di bawah ambang, transisi hold-ke-drag, batas layar, posisi terbaru menggantikan sampel lama, jalur melintasi widget, dan lompatan tracking. Instrumentasi merekam satu ACTION_DOWN, ACTION_MOVE saat drag, tidak ada ACTION_UP di antara segmen, lalu satu ACTION_UP setelah release normal pada titik akhir. Verifikasi long-press callback saat diam, drag langsung dan hold-lalu-drag, kesinambungan endpoint stroke, visual selaras posisi sentuhan, tidak ada tap tambahan setelah drop, aksi manual tertolak selama kontak aktif, dan kontak berakhir saat pause/stop/loss/target change/lock/disconnect. Uji cancellation/rejection/failure continuation secara terpisah; terminasi abnormal boleh berupa cancellation platform, tidak harus normal ACTION_UP, tetapi tidak boleh meninggalkan kontak aktif atau men-trigger tap baru.
+**Khusus hold dan drag:** unit test begin sekali, release sekali, hold lama tanpa repeated down, hysteresis/gap, startup sudah pinch, release saat busy, offset pinch tanpa loncatan, jitter di bawah ambang, transisi hold-ke-drag, batas layar, posisi terbaru menggantikan sampel lama, jalur melintasi widget, dan lompatan tracking. Instrumentasi merekam satu ACTION_DOWN, ACTION_MOVE saat drag, tidak ada ACTION_UP di antara segmen, lalu satu ACTION_UP setelah release normal pada titik akhir. Verifikasi long-press callback saat diam, drag langsung dan hold-lalu-drag, kesinambungan endpoint stroke, visual selaras posisi sentuhan, tidak ada tap tambahan setelah drop, aksi manual tertolak selama kontak aktif, dan kontak berakhir saat pause/stop/loss/target change/lock/disconnect. Uji cancellation/rejection/failure continuation secara terpisah; terminasi abnormal tidak mengirim DOWN atau tap pengganti. Terminal UP untuk kontak yang sudah diterima dapat mengaktifkan target bila kontaknya singkat; kegagalan pelepasan harus memblokir Start sampai pemulihan eksplisit.
 
 **Regresi/build:** jalankan rangkaian di `docs/development.md` sebelum commit implementasi: unit test kedua modul, lintDebug, assembleDebug, assembleRelease, assembleDebugAndroidTest, lalu `git diff --check`. Kompilasi instrumentasi tidak dianggap eksekusi di perangkat. Fixture golden Scroll lama tidak diganti untuk menyembunyikan regresi.
 
@@ -106,9 +108,9 @@ Kerjakan sebagai perubahan kecil terpisah. Jangan mengoptimasi kamera, menaikkan
 
 - Grid sembilan target berukuran 48dp, tiga percobaan per target setelah kalibrasi: minimal 25 dari 27 klik mengenai target dan tidak ada klik ganda untuk satu cubitan.
 - Tangan diam tanpa cubitan selama 30 detik: tidak ada sentuhan tidak sengaja. Cubitan ditahan selama 10 detik: satu kontak berkelanjutan, tidak ada tap/down berulang, lalu kontak berakhir saat jari dipisahkan. Respons berulang yang memang dibuat aplikasi target saat tombol ditahan dibedakan dari pengulangan dispatch aplikasi ini.
-- Pada target latihan long press, hold melewati timeout target memicu respons tekan lama; cubitan singkat hanya tap. Setelah hold dilepas tidak ada klik tambahan. Catat latency release-ke-touch-up dan tetapkan batas penerimaan dari panjang segmen serta konfirmasi pelepasan yang dipilih.
+- Pada target latihan long press, hold melewati timeout target memicu respons tekan lama; cubitan singkat hanya tap. Setelah hold dilepas aplikasi tidak mengirim tap tambahan. Catat latency release-ke-touch-up dan tetapkan batas penerimaan dari panjang segmen serta konfirmasi pelepasan yang dipilih.
 - Drag menjadi gerbang penerimaan utama: 20 percobaan memindahkan objek ke zona drop, mencakup horizontal, vertikal, diagonal, tepi layar, drag langsung, dan hold-lalu-drag. Target sementara minimal 18 berhasil, tanpa touch-up di tengah drag atau tap tambahan setelah drop. Jalankan pada latihan lokal, test activity eksternal, dan aplikasi nyata yang mendukung drag; catat hasil per target, bukan hanya callback dispatch sukses.
-- Lepas tangan dari frame, tutup jari, pindah aplikasi, kunci layar, tekan Pause/Stop, dan ubah orientasi saat cubitan: tidak ada tap tambahan atau kontak tertahan; kursor tidak tertinggal. Long press yang sudah dipicu aplikasi target tidak dapat dijanjikan dibatalkan oleh pelepasan.
+- Lepas tangan dari frame, tutup jari, pindah aplikasi, kunci layar, tekan Pause/Stop, dan ubah orientasi saat cubitan: tidak ada DOWN atau tap pengganti; kursor tidak tertinggal. Amati pelepasan kontak atau kebutuhan pemulihan eksplisit. Kontak singkat yang diakhiri dengan UP tetap dapat mengaktifkan target, dan long press yang sudah dipicu tidak dapat dijanjikan dibatalkan oleh pelepasan.
 - Catat FPS aktual, latency hasil-ke-render, jitter saat diam, error posisi, serta jumlah kehilangan tracking. Target sementara latency hasil-ke-render p95 maksimal 100ms; ini bukan latency kamera-ke-layar. Ukur latency ujung-ke-ujung terpisah dengan observasi/video eksternal bila diperlukan.
 - Uji penggunaan 15 menit pada perangkat fisik: catat panas, konsumsi baterai, drop FPS, dan rasa lelah tangan. Angka batas performa final disepakati dari baseline perangkat uji.
 - Uji portrait/landscape, navigation gesture/tiga tombol, cutout, pencahayaan baik/redup, tangan kiri/kanan, dan sekurangnya dua aplikasi target. Prioritaskan versi Android/OEM perangkat pengguna.
@@ -120,6 +122,7 @@ Kerjakan sebagai perubahan kecil terpisah. Jangan mengoptimasi kamera, menaikkan
 - Mapping ke seluruh layar dari seluruh frame menyulitkan jangkauan; area kalibrasi yang nyaman merupakan bagian MVP, bukan tambahan kosmetik.
 - Application overlay dapat memengaruhi penyaluran sentuhan pada Android modern. Mulai dengan view kursor kecil non-touchable, atur transparansi sesuai aturan platform, dan verifikasi sentuhan menembus overlay pada perangkat; jika gagal, evaluasi accessibility overlay sebelum memperluas fitur.
 - Sistem dispatch mengirim sentuhan, bukan hover mouse. Completion callback tidak membuktikan target menerima klik atau kontak berakhir. Segmen yang sudah diserahkan ke Android mungkin selesai setelah Pause; terminasi hold menunggu jalur platform yang tersedia sehingga UI tidak boleh menjanjikan pembatalan instan. Long press yang sudah memicu aksi target tidak bisa diurungkan secara umum.
+- API accessibility tidak menyediakan cancel langsung. Guard abort memakai continuation terminal UP pada posisi terakhir, sehingga kontak singkat yang sudah diterima dapat dianggap tap oleh target. Pembatalan platform yang menghasilkan CANCEL diuji terpisah; itu tidak menjamin semua interupsi fisik akan menghasilkan CANCEL. Kehilangan binder memerlukan sentuhan layar manual dan acknowledgement sebelum kalibrasi serta Start yang baru.
 - Tidak membaca konten layar atau mengawasi seluruh physical touch. Klik accessibility dapat mengganggu sentuhan manual; pertahankan guard interaksi yang ada dan jelaskan keterbatasan ini dalam instruksi penggunaan.
 
 ## 9. Backlog masa depan
@@ -134,4 +137,6 @@ Setelah pointer satu tangan dengan drag, tap, dan touch and hold lulus penerimaa
 - [AOSP MotionEventInjector API 34](https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android14-release/services/accessibility/java/com/android/server/accessibility/MotionEventInjector.java): pembentukan event dan penolakan continuation tanpa event.
 - [WindowManager.LayoutParams](https://developer.android.com/reference/android/view/WindowManager.LayoutParams#FLAG_NOT_TOUCHABLE): aturan penyaluran touch dan overlay non-touchable.
 
-Rencana ini tidak menyatakan fitur telah tersedia. Bukti build/test terdahulu tidak dipakai sebagai bukti kelayakan pointer.
+Dokumen ini mempertahankan keputusan dan gerbang rencana. Perilaku yang sudah
+diimplementasikan serta pengujian yang benar-benar dijalankan dicatat di receipt;
+hasil build dan emulator tidak membuktikan penerimaan pointer dengan tangan nyata.

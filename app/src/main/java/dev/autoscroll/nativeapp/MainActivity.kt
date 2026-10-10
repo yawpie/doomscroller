@@ -75,6 +75,7 @@ class MainActivity : ComponentActivity() {
                 val settings by app.settings.state.collectAsStateWithLifecycle()
                 val diagnostics by app.session.diagnostics.collectAsStateWithLifecycle()
                 val accessibility by GestureAccessibilityService.readiness.collectAsStateWithLifecycle()
+                val pointerContact by GestureAccessibilityService.pointerContact.collectAsStateWithLifecycle()
                 var consent by remember { mutableStateOf(app.settings.accessibilityConsent) }
                 var pointerConsent by remember { mutableStateOf(app.settings.pointerAccessibilityConsent) }
                 val calibrated by app.session.pointerCalibrationReady.collectAsStateWithLifecycle()
@@ -151,6 +152,13 @@ class MainActivity : ComponentActivity() {
                         app.settings.pointerAccessibilityConsent = true
                         consent = true; pointerConsent = true
                         openPermissionSettings(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                    },
+                    pointerContactActive = pointerContact.active,
+                    pointerRecoveryRequired = pointerContact.recoveryRequired,
+                    onPointerRecovery = {
+                        app.session.invalidatePointerCalibration()
+                        GestureAccessibilityService.acknowledgePointerRecovery()
+                        permissionError = null
                     },
                     )
                 }

@@ -40,6 +40,36 @@ response; record those as separate trials.
 
 At least a limited-performance device and a newer device should be tested when available. Cover Android26-29,30-33,34-36, including at least one vendor with aggressive battery controls. Never mark unavailable devices/API levels passed.
 
+## Pointer acceptance
+
+Select Pointer in the settings draft and Apply. Practice needs only camera access.
+Capture two stable, separated-finger corners with the screen buttons; Open practice
+board keeps every 48dp target and Stop reachable. Use calibration stops practice;
+start external tracking separately from Home after Pointer consent, accessibility
+connection and required cursor overlay access, including with the widget disabled.
+
+The [pointer validation receipt](pointer-validation.md) separates deterministic
+logic and API 34 emulator evidence from the following physical trials. None of the
+numbers below is a measured success rate until a device observation is recorded.
+
+| Trial | Physical evidence required |
+| --- | --- |
+| Nine targets | Three taps per 48dp target after calibration; proposed minimum 25/27 hits, no double activation from one pinch |
+| Idle | 30 seconds of pointing without pinch; no unintended touch |
+| Hold | 10 seconds pinched and stationary; one DOWN, no repeated dispatch, one release; distinguish target's own repeat behavior |
+| Long press |Target's long-press response plus a short pinch control; measure release-to-UP latency separately |
+| Drag, primary gate | 20 drops per local practice, external test activity and compatible real app; proposed minimum 18/20 successes, horizontal/vertical/diagonal/edge directions, direct and hold-then-drag, no UP between segments or added tap after drop |
+| Interruptions |Loss, gap, target-app change, Pause/Stop, widget interaction, lock, rotation, bounds change, accessibility disconnect and camera/overlay revocation while held; observe terminal event/contact outcome and hidden cursor |
+| Recovery |If release is unconfirmed, new Scroll/Pointer actions blocked; physical screen touch then explicit Home acknowledgement, fresh calibration and separate Start; no automatic restart |
+| Tracking/performance | Actual inference FPS, stationary jitter, position error, losses, result-to-render p95 (proposed ≤100ms, not camera-to-screen latency), separate end-to-end observation |
+| Sustained use | 15 minutes; thermal/battery/FPS changes and hand fatigue, without production frame recording or upload |
+| Conditions | Left/right hand, good/dim light, distance/occlusion, portrait/landscape/cutout, gesture/three-button navigation, at least two real target apps; API 26–29/30–33/34–36 and OEM variants when available |
+
+A guard abort requests terminal UP at the last executed point. An accepted short
+touch may still activate the target; no new replacement tap is sent. Long-press
+effects cannot generally be undone. After binder loss Android has no public cancel
+operation, so a manual screen touch can be needed before explicit recovery.
+
 ## Benchmark collection
 
 Use Settings → Advanced → Diagnostics for delivered analyzer FPS, effective inference FPS, completed/skipped/stale counts and conversion+inference latency summary. Record frame-arrival-to-dispatch latency separately from observed page-change latency. Do not subtract sensor capture timestamps from elapsedRealtime without first verifying their clock source. CameraX hidden drops are not measured.

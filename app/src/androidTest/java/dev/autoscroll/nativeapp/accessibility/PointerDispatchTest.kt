@@ -13,6 +13,7 @@ import android.view.WindowManager
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.autoscroll.nativeapp.scrolling.*
+import dev.autoscroll.nativeapp.MainActivity
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -118,6 +119,53 @@ class PointerDispatchTest {
             awaitTerminal(surface)
             assertEquals(ScrollExecutionResult.REJECTED, GestureAccessibilityService.pointerContact.value.lastResult)
             assertContact(surface.events(), first, moving = true)
+            assertEquals(0, surface.drops)
+        }
+    }
+
+    @Test fun invalidatedSessionEndsContactWhenNextMoveIsGuarded() = runBlocking {
+        withSurface { surface ->
+            val allowed = AtomicBoolean(true)
+            val adapter = AccessibilityScrollAdapter()
+            begin(adapter, surface.start, allowed)
+            instrumentation.runOnMainSync {
+                allowed.set(false)
+                adapter.movePointer(sample(surface.drop))
+            }
+            awaitTerminal(surface)
+            assertEquals(ScrollExecutionResult.REJECTED, GestureAccessibilityService.pointerContact.value.lastResult)
+            assertContact(surface.events(), surface.start, moving = false)
+        }
+    }
+
+    @Test fun changedBoundsOrRotationSampleEndsContactWithoutMoving() = runBlocking {
+        for (changeRotation in listOf(false, true)) withSurface { surface ->
+            val adapter = AccessibilityScrollAdapter()
+            begin(adapter, surface.start)
+            instrumentation.runOnMainSync {
+                val fresh = sample(surface.drop)
+                adapter.movePointer(if (changeRotation) fresh.copy(rotation = (fresh.rotation + 1) % 4)
+                    else fresh.copy(bounds = fresh.bounds.copy(width = fresh.bounds.width - 1)))
+            }
+            awaitTerminal(surface)
+            assertEquals(ScrollExecutionResult.REJECTED, GestureAccessibilityService.pointerContact.value.lastResult)
+            assertContact(surface.events(), surface.start, moving = false)
+        }
+    }
+
+    @Test fun ownAppWindowChangeTerminatesContactWithoutReplacementDown() = runBlocking {
+        withSurface { surface ->
+            val adapter = AccessibilityScrollAdapter()
+            begin(adapter, surface.start)
+            context.startActivity(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            withTimeout(5000) { GestureAccessibilityService.pointerContact.first { !it.active } }
+            assertFalse(GestureAccessibilityService.pointerContact.value.recoveryRequired)
+            val deadline = SystemClock.uptimeMillis() + 3000
+            while (surface.events().none { it.getInt("action") in listOf(MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL) } &&
+                SystemClock.uptimeMillis() < deadline) SystemClock.sleep(50)
+            val actions = surface.events().map { it.getInt("action") }
+            assertEquals(1, actions.count { it == MotionEvent.ACTION_DOWN })
+            assertEquals("Target must receive one terminal event", 1, actions.count { it == MotionEvent.ACTION_UP || it == MotionEvent.ACTION_CANCEL })
             assertEquals(0, surface.drops)
         }
     }

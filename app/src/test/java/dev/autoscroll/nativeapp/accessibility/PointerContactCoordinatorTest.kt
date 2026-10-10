@@ -162,17 +162,33 @@ class PointerContactCoordinatorTest {
         assertTrue(h.contact.state.dispatching)
     }
 
-    @Test fun cancellationFromStateListenerCannotSendTerminalBeforeBeginOrLeaveLateBeginActive() {
+    @Test fun cancellationFromStateListenerBeforeBeginDoesNotSendAnyTouch() {
         val sent = mutableListOf<PointerSegment>()
         val callbacks = mutableListOf<(ScrollExecutionResult) -> Unit>()
         lateinit var contact: PointerContactCoordinator
         contact = PointerContactCoordinator(guard = { _, _ -> null }, dispatch = { segment, callback ->
             sent += segment; callbacks += callback; null
         }, onState = { if (it.active && !it.ending) contact.end() })
+        assertEquals(ScrollExecutionResult.REJECTED, contact.begin(sample(200)))
+        assertTrue(sent.isEmpty())
+        assertTrue(callbacks.isEmpty())
+        assertFalse(contact.state.active)
+    }
+
+    @Test fun cancellationFromStateListenerBeforeMoveEndsAtPreviousPoint() {
+        val sent = mutableListOf<PointerSegment>()
+        val callbacks = mutableListOf<(ScrollExecutionResult) -> Unit>()
+        var cancel = false
+        lateinit var contact: PointerContactCoordinator
+        contact = PointerContactCoordinator(guard = { _, _ -> null }, dispatch = { segment, callback ->
+            sent += segment; callbacks += callback; null
+        }, onState = { if (cancel && it.active && !it.ending && it.dispatching) contact.end() })
         contact.begin(sample(200))
-        assertEquals(listOf(PointerSegmentKind.BEGIN), sent.map { it.kind })
         callbacks.removeAt(0)(ScrollExecutionResult.COMPLETED)
+        cancel = true
+        contact.move(sample(700))
         assertEquals(listOf(PointerSegmentKind.BEGIN, PointerSegmentKind.END), sent.map { it.kind })
+        assertEquals(ScreenPoint(200, 200), sent.last().end)
         callbacks.removeAt(0)(ScrollExecutionResult.COMPLETED)
         assertFalse(contact.state.active)
     }

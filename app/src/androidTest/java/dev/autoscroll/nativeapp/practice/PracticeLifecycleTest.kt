@@ -151,10 +151,12 @@ class PracticeLifecycleTest {
 
     private fun click(text: String) {
         reveal(text, AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD, clickable = true)
-        // Refresh semantics after scrolling before invoking the control's accessibility action.
+        // Compose can replace virtual nodes after a scroll or camera recomposition.
         automation.waitForIdle(300, 5_000)
-        val node = checkNotNull(find(automation.rootInActiveWindow, text, clickable = true))
-        assertTrue("Cannot click $text", node.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+        waitUntil {
+            val node = find(automation.rootInActiveWindow, text, clickable = true)
+            node != null && visible(node) && node.refresh() && node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+        }
         instrumentation.waitForIdleSync()
     }
 
@@ -195,6 +197,12 @@ class PracticeLifecycleTest {
             if (target != null && visible(target)) true
             else {
                 scrollable(root)?.let { container ->
+                    if (target != null) {
+                        val viewport = bounds(container)
+                        val targetBounds = bounds(target)
+                        searchDirection = if (targetBounds.top < viewport.top) AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
+                            else AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
+                    }
                     val opposite = if (searchDirection == AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
                         AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD else AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
                     if (container.actionList.none { it.id == searchDirection } && container.actionList.any { it.id == opposite })
@@ -223,7 +231,13 @@ class PracticeLifecycleTest {
     private fun visible(node: AccessibilityNodeInfo): Boolean {
         val bounds = Rect()
         node.getBoundsInScreen(bounds)
-        return node.isVisibleToUser && !bounds.isEmpty
+        if (!node.isVisibleToUser || bounds.isEmpty) return false
+        var ancestor = node.parent
+        while (ancestor != null) {
+            if (ancestor.isScrollable && !bounds(ancestor).contains(bounds)) return false
+            ancestor = ancestor.parent
+        }
+        return true
     }
     private fun find(node: AccessibilityNodeInfo?, text: String, clickable: Boolean = false): AccessibilityNodeInfo? {
         if (node == null) return null
@@ -231,7 +245,7 @@ class PracticeLifecycleTest {
             if (!clickable) return node
             var target: AccessibilityNodeInfo? = node
             while (target != null && !target.isClickable) target = target.parent
-            if (target != null && target.isEnabled && visible(target)) return target
+            if (target != null && target.isEnabled) return target
         }
         for (index in 0 until node.childCount) find(node.getChild(index), text, clickable)?.let { return it }
         return null
@@ -244,7 +258,11 @@ class PracticeLifecycleTest {
     }
     private fun waitUntil(condition: () -> Boolean) {
         val deadline = System.nanoTime() + 20_000_000_000L
-        while (!condition() && System.nanoTime() < deadline) Thread.sleep(50)
-        assertTrue("Practice condition timed out", condition())
+        var satisfied = condition()
+        while (!satisfied && System.nanoTime() < deadline) {
+            Thread.sleep(50)
+            satisfied = condition()
+        }
+        assertTrue("Practice condition timed out", satisfied)
     }
 }

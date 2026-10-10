@@ -2,7 +2,8 @@
 
 Kotlin Android application with Compose Material 3, front CameraX/MediaPipe
 tracking, pose/flick/continuous recognition, foreground camera service, draggable
-controls and user-requested accessibility swipes and taps. The repository root is
+controls and user-requested accessibility swipes, taps and finger-pointer drag.
+The repository root is
 the complete Android Studio project; no Flutter or Dart SDK is required.
 
 Two modules: `gesture` contains Android-free Kotlin logic; `app` supplies platform
@@ -39,7 +40,7 @@ Home shows readiness and one Start / Pause / Resume control, with Stop below it.
 Use its permission checklist to grant camera access and read the affirmative
 accessibility disclosure, then enable Scroll Vision gestures in Android Settings.
 Camera denial explains retry or App info access. Floating controls and notifications
-are optional; Skip floating controls saves the existing overlay preference as off.
+are optional in Scroll; Skip floating controls saves the existing overlay preference as off.
 Start on Home and wait for Tracking before switching to a feed.
 
 HYBRID/POSE: point down/up to navigate, show an open hand for one single tap per
@@ -57,6 +58,32 @@ entry pauses external tracking and cancels pending manual tests. Leaving, lockin
 backgrounding or recreation releases its camera and never restarts it automatically.
 Return to Home and press Start / Resume to control another app again. Practice
 does not create an accessibility action adapter or send any external swipe or tap.
+Settings → Control mode selects Scroll (the existing default) or Pointer. Apply
+the draft, then use Gestures → Practice safely. Pointer uses one hand: extend the
+index finger to aim; pinch thumb and index to press, keep pinched to hold, move
+while pinched to drag, and separate to release. A short contact is a tap. Drag can
+start immediately or after a hold when the target app needs long press.
+
+Pointer practice takes two stable pointing corners with screen buttons. Keep the
+fingers separated for calibration. Open practice board shows all nine 48dp tap
+targets, the center hold target, a Drag square and Drop zone together; Stop stays
+visible. Its camera preview is hidden in this focused view while recognition
+continues locally. Back to practice returns to the preview and calibration controls.
+Use calibration stops practice and prepares one explicit Home Start. Calibration
+is session-only: Pause, Stop, Apply, rotation or content-bounds changes discard it.
+Pointer requires camera, its affirmative accessibility disclosure, the accessibility
+service and cursor overlay permission even with Floating controls turned off.
+The small cursor does not take focus or touch input; its center is the dispatched
+screen point. It hides over Scroll Vision, blocked targets, controls and lost tracking.
+
+Held contacts use one continuous Android touch, without repeated taps or a separate
+tap after drop. An app change, tracking loss, Pause or Stop requests release at the
+last executed point. A submitted segment can finish first; a short released contact
+may still activate its target and an earlier long-press action cannot be undone.
+If release cannot be confirmed, new Scroll and Pointer actions remain blocked.
+Touch the screen manually, acknowledge recovery in Home, then recalibrate and press
+Start explicitly. Android has no public cancellation API after a lost service binder.
+
 Settings offers direction reversal and floating controls. Every existing technical
 control, diagnostics field and manual action test is grouped under Advanced.
 Edits remain a draft across tabs and rotation. Apply changes saves once and pauses
@@ -79,6 +106,7 @@ status, Pause, Stop and Open app; resume always needs an explicit press in Home.
 - [Native tap gestures](docs/tap-gestures.md)
 - [Permissions](docs/permissions.md)
 - [Physical-device trials](docs/device-validation.md)
+- [Pointer implementation and validation receipt](docs/pointer-validation.md)
 - [Prior independent QA review](docs/qa-review.md)
 
 No recording, frame upload, backend, analytics, runtime model download or network
