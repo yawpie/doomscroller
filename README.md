@@ -58,6 +58,8 @@ entry pauses external tracking and cancels pending manual tests. Leaving, lockin
 backgrounding or recreation releases its camera and never restarts it automatically.
 Return to Home and press Start / Resume to control another app again. Practice
 does not create an accessibility action adapter or send any external swipe or tap.
+The screen stays awake while Practice is open, including the focused pointer board;
+leaving Practice restores the normal screen timeout.
 Settings → Control mode selects Scroll (the existing default) or Pointer. Apply
 the draft, then use Gestures → Practice safely. Pointer uses one hand: extend the
 index finger to aim; pinch thumb and index to press, keep pinched to hold, move

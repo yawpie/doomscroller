@@ -9,6 +9,7 @@ import android.graphics.BitmapFactory
 import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
+import android.view.WindowManager
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -38,6 +39,23 @@ class PracticeLifecycleTest {
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
     private val app get() = instrumentation.targetContext.applicationContext as GestureApplication
     private val automation get() = instrumentation.getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
+
+    @Test fun practiceKeepsScreenAwakeAcrossRecreationUntilExit() {
+        assumeTrue("A user-owned session is already running", app.session.machine.state == GestureSessionState.Stopped &&
+            !app.session.serviceRunning && !app.session.practiceOpen)
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            scenario.onActivity { assertEquals(0, it.window.attributes.flags and WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
+            click("Gestures")
+            click("Practice safely")
+            scenario.onActivity { assertNotEquals(0, it.window.attributes.flags and WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
+            scenario.recreate()
+            waitUntil { textExists("Practice stopped") }
+            scenario.onActivity { assertNotEquals(0, it.window.attributes.flags and WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
+            click("Back to Gestures")
+            scenario.onActivity { assertEquals(0, it.window.attributes.flags and WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
+            assertFalse(app.session.practiceOpen)
+        }
+    }
 
     @Test fun fixturePreviewShowsLandmarksAndToggleOnlyHidesDrawing() {
         assumeTrue("A user-owned session is already running", app.session.machine.state == GestureSessionState.Stopped &&

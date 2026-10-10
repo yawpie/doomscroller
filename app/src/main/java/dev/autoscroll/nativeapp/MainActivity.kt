@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
 import android.provider.Settings
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -193,6 +194,7 @@ class MainActivity : ComponentActivity() {
         permissionError = null
         app.session.enterPractice()
         practiceVisible = true
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         if (app.session.serviceRunning) try {
             startService(Intent(this, GestureCameraService::class.java).setAction(GestureCameraService.ACTION_PREPARE_PRACTICE))
         } catch (_: Exception) {
@@ -204,6 +206,7 @@ class MainActivity : ComponentActivity() {
         practice.stop()
         app.session.leavePractice()
         practiceVisible = false
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
 
     private fun hasCamera() = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
