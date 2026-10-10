@@ -29,6 +29,13 @@ class GestureAccessibilityService : AccessibilityService() {
     private var interactionBlockedUntil = 0L
     private var inFlight: Dispatch? = null
     private var pointerInsets: WindowInsets? = null
+    private var pointerStroke: GestureDescription.StrokeDescription? = null
+    private var pointerSample: PointerDispatchSample? = null
+    private var pointerSessionAllowed: () -> Boolean = { false }
+    private var pointerWidget: () -> Rect? = { null }
+    private var pointerListener: (PointerContactState) -> Unit = {}
+    private var pointerTimeout: Runnable? = null
+    private val pointer = PointerContactCoordinator(::validatePointer, ::dispatchPointer, ::publishPointerContact)
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -41,7 +48,9 @@ class GestureAccessibilityService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (::target.isInitialized && event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            val previous = target.state
             target.update(event.packageName?.toString())
+            if (previous != target.state) pointer.end(ScrollExecutionResult.TARGET_BLOCKED)
             mutableTargetReadiness.value = target.allowed
             mutableTarget.value = target.state
         }
@@ -53,6 +62,7 @@ class GestureAccessibilityService : AccessibilityService() {
 
     internal fun suspendForInteraction(durationMs: Long) {
         interactionBlockedUntil = maxOf(interactionBlockedUntil, SystemClock.elapsedRealtime() + durationMs)
+        pointer.end(ScrollExecutionResult.USER_INTERACTION)
     }
     internal fun pointerAllowed(): Boolean = connectedService === this && ::target.isInitialized && target.allowed &&
         !getSystemService(KeyguardManager::class.java).isKeyguardLocked && getSystemService(PowerManager::class.java).isInteractive &&
@@ -63,7 +73,7 @@ class GestureAccessibilityService : AccessibilityService() {
     internal suspend fun execute(request: ScrollRequest, config: SwipeConfig, overlayBounds: Rect?): ScrollExecutionResult {
         check(Looper.myLooper() == Looper.getMainLooper())
         if (connectedService !== this) return ScrollExecutionResult.UNAVAILABLE
-        if (inFlight != null) return ScrollExecutionResult.BUSY
+        if (inFlight != null || pointerDispatchBusy) return ScrollExecutionResult.BUSY
         if (!::target.isInitialized || !target.allowed) return ScrollExecutionResult.TARGET_BLOCKED
         if (getSystemService(KeyguardManager::class.java).isKeyguardLocked ||
             !getSystemService(PowerManager::class.java).isInteractive
@@ -107,6 +117,8 @@ class GestureAccessibilityService : AccessibilityService() {
     }
 
     private fun disconnect() {
+        // Best effort before losing the binder; there is no public gesture-cancel API after disconnect.
+        pointer.end(ScrollExecutionResult.UNAVAILABLE)
         if (connectedService === this) {
             connectedService = null
             mutableReadiness.value = false
@@ -128,6 +140,89 @@ class GestureAccessibilityService : AccessibilityService() {
 
     internal fun contentBounds(): SwipeBounds = screenContentBounds(this, pointerInsets)
 
+    internal fun beginPointer(sample: PointerDispatchSample, allowed: () -> Boolean,
+        widget: () -> Rect?, listener: (PointerContactState) -> Unit): ScrollExecutionResult? {
+        check(Looper.myLooper() == Looper.getMainLooper())
+        if (inFlight != null || pointerDispatchBusy) return ScrollExecutionResult.BUSY
+        pointerSample = sample; pointerSessionAllowed = allowed; pointerWidget = widget; pointerListener = listener
+        pointerOwner = this
+        val result = pointer.begin(sample)
+        if (result != null && !pointer.state.active) {
+            pointerOwner = null; pointerListener = {}; pointerSessionAllowed = { false }; pointerWidget = { null }
+        }
+        return result
+    }
+
+    internal fun movePointer(sample: PointerDispatchSample) { pointer.move(sample) }
+    internal fun endPointer(result: ScrollExecutionResult = ScrollExecutionResult.COMPLETED) { pointer.end(result) }
+
+    private fun validatePointer(sample: PointerDispatchSample, start: ScreenPoint): ScrollExecutionResult? {
+        if (connectedService !== this) return ScrollExecutionResult.UNAVAILABLE
+        if (inFlight != null) return ScrollExecutionResult.BUSY
+        if (!pointerSessionAllowed()) return ScrollExecutionResult.REJECTED
+        if (!::target.isInitialized || !target.allowed || target.state.packageName != sample.targetPackage ||
+            pointerSample?.targetPackage != sample.targetPackage) return ScrollExecutionResult.TARGET_BLOCKED
+        if (getSystemService(KeyguardManager::class.java).isKeyguardLocked ||
+            !getSystemService(PowerManager::class.java).isInteractive) return ScrollExecutionResult.SCREEN_LOCKED
+        val now = SystemClock.elapsedRealtime()
+        if (now < interactionBlockedUntil) return ScrollExecutionResult.USER_INTERACTION
+        if (sample.timestampMs < 0 || sample.timestampMs > now || now - sample.timestampMs >= 300) return ScrollExecutionResult.REJECTED
+        @Suppress("DEPRECATION")
+        val rotation = getSystemService(android.view.WindowManager::class.java).defaultDisplay.rotation
+        if (sample.bounds != contentBounds() || sample.bounds != pointerSample?.bounds ||
+            sample.rotation != rotation || sample.rotation != pointerSample?.rotation) return ScrollExecutionResult.REJECTED
+        val widget = pointerWidget()?.let { SwipeBounds(it.left, it.top, it.width(), it.height()) }
+        if (!pointerPathAllowed(start, sample.point, sample.bounds, widget)) return ScrollExecutionResult.TARGET_BLOCKED
+        return null
+    }
+
+    private fun dispatchPointer(segment: PointerSegment, complete: (ScrollExecutionResult) -> Unit): ScrollExecutionResult? {
+        if (connectedService !== this) return ScrollExecutionResult.UNAVAILABLE
+        val path = Path().apply {
+            moveTo(segment.start.x.toFloat(), segment.start.y.toFloat())
+            if (segment.kind == PointerSegmentKind.MOVE) lineTo(segment.end.x.toFloat(), segment.end.y.toFloat())
+        }
+        val duration = if (segment.kind == PointerSegmentKind.MOVE) 80L else 1L
+        val stroke = try {
+            if (segment.kind == PointerSegmentKind.BEGIN) GestureDescription.StrokeDescription(path, 0, duration, true)
+            else pointerStroke?.continueStroke(path, 0, duration, segment.kind != PointerSegmentKind.END)
+                ?: return ScrollExecutionResult.REJECTED
+        } catch (_: IllegalArgumentException) { return ScrollExecutionResult.REJECTED }
+        lateinit var timeout: Runnable
+        val finish = pointerResultOnce { result ->
+            handler.removeCallbacks(timeout)
+            if (pointerTimeout === timeout) pointerTimeout = null
+            if (result == ScrollExecutionResult.CANCELLED)
+                interactionBlockedUntil = maxOf(interactionBlockedUntil, SystemClock.elapsedRealtime() + 800)
+            complete(result)
+        }
+        timeout = Runnable { finish(ScrollExecutionResult.UNAVAILABLE) }
+        val callback = object : GestureResultCallback() {
+            override fun onCompleted(gestureDescription: GestureDescription?) { finish(ScrollExecutionResult.COMPLETED) }
+            override fun onCancelled(gestureDescription: GestureDescription?) { finish(ScrollExecutionResult.CANCELLED) }
+        }
+        val accepted = try {
+            dispatchGesture(GestureDescription.Builder().addStroke(stroke).build(), callback, handler)
+        } catch (_: SecurityException) { return ScrollExecutionResult.UNAVAILABLE }
+        catch (_: IllegalStateException) { return ScrollExecutionResult.REJECTED }
+        if (!accepted) return ScrollExecutionResult.REJECTED
+        pointerStroke = stroke
+        pointerTimeout = timeout
+        handler.postDelayed(timeout, duration + 1500)
+        return null
+    }
+
+    private fun publishPointerContact(state: PointerContactState) {
+        if (pointerOwner !== this) return
+        mutablePointerContact.value = state
+        val listener = pointerListener
+        if (!state.active && !state.recoveryRequired) {
+            pointerOwner = null; pointerStroke = null; pointerSample = null
+            pointerListener = {}; pointerSessionAllowed = { false }; pointerWidget = { null }
+        }
+        listener(state)
+    }
+
     private class Dispatch(val continuation: CancellableContinuation<ScrollExecutionResult>)
 
     companion object {
@@ -139,6 +234,14 @@ class GestureAccessibilityService : AccessibilityService() {
         internal val targetState = mutableTarget.asStateFlow()
         internal var connectedService: GestureAccessibilityService? = null
             private set
+        private var pointerOwner: GestureAccessibilityService? = null
+        private val mutablePointerContact = MutableStateFlow(PointerContactState())
+        internal val pointerContact = mutablePointerContact.asStateFlow()
+        internal val pointerDispatchBusy get() = pointerContact.value.active || pointerContact.value.recoveryRequired
+        internal fun acknowledgePointerRecovery() {
+            check(Looper.myLooper() == Looper.getMainLooper())
+            pointerOwner?.pointer?.acknowledgeRecovery()
+        }
     }
 }
 

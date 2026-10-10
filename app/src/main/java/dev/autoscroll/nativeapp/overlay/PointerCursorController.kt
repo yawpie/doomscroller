@@ -11,11 +11,13 @@ import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 import dev.autoscroll.nativeapp.accessibility.ScreenPoint
+import dev.autoscroll.nativeapp.gesture.PointerPhase
 
 /** A small, service-owned cursor. Its center is the future touch coordinate. */
 internal class PointerCursorController(context: Context, private val onPosition: (ScreenPoint) -> Unit) : AutoCloseable {
     private val windows = context.getSystemService(WindowManager::class.java)
     private val size = ((24 * context.resources.displayMetrics.density).toInt() / 2 * 2).coerceAtLeast(2)
+    private var phase = PointerPhase.TRACKING
     private val root = object : View(context) {
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; strokeWidth = 3f; style = Paint.Style.STROKE }
         override fun onDraw(canvas: Canvas) {
@@ -27,6 +29,18 @@ internal class PointerCursorController(context: Context, private val onPosition:
             canvas.drawCircle(center, center, center - 4, paint)
             canvas.drawLine(center - 6, center, center + 6, center, paint)
             canvas.drawLine(center, center - 6, center, center + 6, paint)
+            if (phase == PointerPhase.CONFIRMING || phase == PointerPhase.PRESSED ||
+                phase == PointerPhase.DRAGGING || phase == PointerPhase.RELEASING) {
+                paint.style = Paint.Style.FILL
+                paint.color = when (phase) {
+                    PointerPhase.CONFIRMING -> Color.YELLOW
+                    PointerPhase.DRAGGING -> Color.CYAN
+                    PointerPhase.RELEASING -> Color.MAGENTA
+                    else -> Color.GREEN
+                }
+                canvas.drawCircle(center, center, center / 3, paint)
+                paint.style = Paint.Style.STROKE
+            }
         }
     }.apply { importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO }
     @Suppress("DEPRECATION")
@@ -50,8 +64,9 @@ internal class PointerCursorController(context: Context, private val onPosition:
             true
         }
     }
-    fun move(point: ScreenPoint) {
+    fun move(point: ScreenPoint, phase: PointerPhase = PointerPhase.TRACKING) {
         check(Looper.myLooper() == Looper.getMainLooper())
+        this.phase = phase; root.invalidate()
         params.x = point.x - size / 2; params.y = point.y - size / 2
         root.visibility = View.VISIBLE
         if (!attached) { windows.addView(root, params); attached = true }

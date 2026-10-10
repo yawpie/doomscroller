@@ -205,6 +205,13 @@ class MainActivity : ComponentActivity() {
         ?: screenContentBounds(this, window.decorView.rootWindowInsets)
     private fun startSession() {
         if (!app.session.activityVisible || app.session.practiceOpen) return
+        if (GestureAccessibilityService.pointerDispatchBusy) {
+            app.session.diagnostics(app.session.diagnostics.value.copy(rejectionReason =
+                if (GestureAccessibilityService.pointerContact.value.recoveryRequired)
+                    "Touch release could not be confirmed. Touch manually, then acknowledge recovery."
+                else "Previous touch is ending. Press Start again after it finishes."))
+            return
+        }
         GestureAccessibilityService.connectedService?.updatePointerInsets(window.decorView.rootWindowInsets)
         app.session.checkPointerCalibrationBounds(externalContentBounds(), screenRotation())
         if (app.settings.state.value.controlMode == ControlMode.POINTER && app.session.pointerCalibration == null) {
