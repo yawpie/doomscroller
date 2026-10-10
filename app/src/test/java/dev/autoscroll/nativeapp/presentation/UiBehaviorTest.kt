@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelStore
 import dev.autoscroll.nativeapp.gesture.GestureMode
 import dev.autoscroll.nativeapp.session.GestureSessionState
 import dev.autoscroll.nativeapp.settings.NativeSettings
+import dev.autoscroll.nativeapp.settings.ControlMode
 import dev.autoscroll.nativeapp.settings.SettingsGroup
 import dev.autoscroll.nativeapp.settings.reset
 import org.junit.Assert.*
@@ -43,6 +44,14 @@ class UiBehaviorTest {
         for (state in listOf(GestureSessionState.Stopped, GestureSessionState.Paused, GestureSessionState.Error("camera"))) {
             assertFalse(settingsChangePauses(state, saved, changed))
         }
+    }
+
+    @Test fun pointerRequiresCursorPermissionItsOwnDisclosureAndLocalCalibrationEvenWithWidgetOff() {
+        assertFalse(readyToStart(true, true, true, false, false, ControlMode.POINTER, true, true))
+        assertFalse(readyToStart(true, true, true, false, true, ControlMode.POINTER, false, true))
+        assertFalse(readyToStart(true, true, true, false, true, ControlMode.POINTER, true, false))
+        assertTrue(readyToStart(true, true, true, false, true, ControlMode.POINTER, true, true))
+        assertTrue(readyToStart(true, true, true, false, false, ControlMode.SCROLL, false, false))
     }
 
     @Test fun groupResetChangesOnlyThatGroupsDraftValues() {

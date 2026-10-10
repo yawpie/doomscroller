@@ -2,6 +2,7 @@ package dev.autoscroll.nativeapp.accessibility
 
 import android.content.ComponentName
 import android.content.Intent
+import android.app.UiAutomation
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -28,6 +29,7 @@ import java.util.concurrent.TimeUnit
 @Suppress("PLATFORM_CLASS_MAPPED_TO_KOTLIN")
 class AccessibilityDispatchTest {
     @Test fun enabledServiceSingleAndDoubleTapAreRecognizedByExternalSurface() = runBlocking {
+        InstrumentationRegistry.getInstrumentation().getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
         // Instrumentation restarts the app; Settings may need to reconnect its enabled service.
         assumeTrue("Enable/reconnect Hand Scroll accessibility in Settings after this test starts",
             withTimeoutOrNull(30_000) { GestureAccessibilityService.readiness.first { it } } == true)
@@ -68,8 +70,9 @@ class AccessibilityDispatchTest {
     }
 
     @Test fun enabledServiceDispatchesBothDirectionsAndScrollSurfaceActuallyMoves() = runBlocking {
+        InstrumentationRegistry.getInstrumentation().getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
         assumeTrue("Enable Hand Scroll accessibility manually before running this integration test",
-            withTimeoutOrNull(5000) { GestureAccessibilityService.readiness.first { it } } == true)
+            withTimeoutOrNull(30_000) { GestureAccessibilityService.readiness.first { it } } == true)
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val ready = CountDownLatch(1)
         val destroyed = CountDownLatch(1)

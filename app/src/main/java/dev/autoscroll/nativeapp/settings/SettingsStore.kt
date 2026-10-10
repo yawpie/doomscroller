@@ -52,6 +52,9 @@ class SettingsStore(context: Context) {
     var accessibilityConsent: Boolean
         get() = preferences.getBoolean("accessibilityConsent", false)
         set(value) { preferences.edit().putBoolean("accessibilityConsent", value).apply() }
+    var pointerAccessibilityConsent: Boolean
+        get() = preferences.getBoolean("pointerAccessibilityConsent", false)
+        set(value) { preferences.edit().putBoolean("pointerAccessibilityConsent", value).apply() }
 
     fun update(settings: NativeSettings) {
         require(settings.swipeDurationMs in 100..1000 && settings.swipeDistance in 0.1..0.8)

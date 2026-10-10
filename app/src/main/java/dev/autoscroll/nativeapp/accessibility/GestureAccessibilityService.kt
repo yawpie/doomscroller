@@ -6,14 +6,11 @@ import android.app.KeyguardManager
 import android.content.Intent
 import android.graphics.Path
 import android.graphics.Rect
-import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
-import android.util.DisplayMetrics
 import android.view.WindowInsets
-import android.view.WindowManager
 import android.view.ViewConfiguration
 import android.view.accessibility.AccessibilityEvent
 import dev.autoscroll.nativeapp.scrolling.ScrollExecutionResult
@@ -31,12 +28,14 @@ class GestureAccessibilityService : AccessibilityService() {
     private lateinit var target: TargetWindowPolicy
     private var interactionBlockedUntil = 0L
     private var inFlight: Dispatch? = null
+    private var pointerInsets: WindowInsets? = null
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         target = TargetWindowPolicy(packageName)
         connectedService = this
         mutableTargetReadiness.value = false
+        mutableTarget.value = TargetWindowState()
         mutableReadiness.value = true
     }
 
@@ -44,6 +43,7 @@ class GestureAccessibilityService : AccessibilityService() {
         if (::target.isInitialized && event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             target.update(event.packageName?.toString())
             mutableTargetReadiness.value = target.allowed
+            mutableTarget.value = target.state
         }
     }
 
@@ -54,6 +54,11 @@ class GestureAccessibilityService : AccessibilityService() {
     internal fun suspendForInteraction(durationMs: Long) {
         interactionBlockedUntil = maxOf(interactionBlockedUntil, SystemClock.elapsedRealtime() + durationMs)
     }
+    internal fun pointerAllowed(): Boolean = connectedService === this && ::target.isInitialized && target.allowed &&
+        !getSystemService(KeyguardManager::class.java).isKeyguardLocked && getSystemService(PowerManager::class.java).isInteractive &&
+        SystemClock.elapsedRealtime() >= interactionBlockedUntil
+    // Activity insets stay authoritative: the tiny cursor's window uses a different inset policy.
+    internal fun updatePointerInsets(insets: WindowInsets?) { pointerInsets = insets }
 
     internal suspend fun execute(request: ScrollRequest, config: SwipeConfig, overlayBounds: Rect?): ScrollExecutionResult {
         check(Looper.myLooper() == Looper.getMainLooper())
@@ -106,6 +111,7 @@ class GestureAccessibilityService : AccessibilityService() {
             connectedService = null
             mutableReadiness.value = false
             mutableTargetReadiness.value = false
+            mutableTarget.value = TargetWindowState()
         }
         inFlight?.let { finish(it, ScrollExecutionResult.UNAVAILABLE) }
     }
@@ -120,30 +126,7 @@ class GestureAccessibilityService : AccessibilityService() {
         super.onDestroy()
     }
 
-    private fun contentBounds(): SwipeBounds {
-        val manager = getSystemService(WindowManager::class.java)
-        if (Build.VERSION.SDK_INT >= 30) {
-            val metrics = manager.maximumWindowMetrics
-            val bounds = metrics.bounds
-            val insets = metrics.windowInsets.getInsetsIgnoringVisibility(
-                WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
-            return SwipeBounds(bounds.left + insets.left, bounds.top + insets.top,
-                (bounds.width() - insets.left - insets.right).coerceAtLeast(1),
-                (bounds.height() - insets.top - insets.bottom).coerceAtLeast(1))
-        }
-        @Suppress("DEPRECATION")
-        val displayMetrics = DisplayMetrics().also { manager.defaultDisplay.getRealMetrics(it) }
-        // ponytail: API 26-29 system-bar resource sizes are conservative; verify OEM landscape/navigation modes.
-        val top = systemDimension("status_bar_height")
-        val bottom = systemDimension("navigation_bar_height")
-        return SwipeBounds(0, top, displayMetrics.widthPixels,
-            (displayMetrics.heightPixels - top - bottom).coerceAtLeast(1))
-    }
-
-    private fun systemDimension(name: String): Int {
-        val id = resources.getIdentifier(name, "dimen", "android")
-        return if (id == 0) 0 else resources.getDimensionPixelSize(id)
-    }
+    internal fun contentBounds(): SwipeBounds = screenContentBounds(this, pointerInsets)
 
     private class Dispatch(val continuation: CancellableContinuation<ScrollExecutionResult>)
 
@@ -152,6 +135,8 @@ class GestureAccessibilityService : AccessibilityService() {
         val readiness: StateFlow<Boolean> = mutableReadiness.asStateFlow()
         private val mutableTargetReadiness = MutableStateFlow(false)
         internal val targetReadiness: StateFlow<Boolean> = mutableTargetReadiness.asStateFlow()
+        private val mutableTarget = MutableStateFlow(TargetWindowState())
+        internal val targetState = mutableTarget.asStateFlow()
         internal var connectedService: GestureAccessibilityService? = null
             private set
     }

@@ -23,6 +23,7 @@ import dev.autoscroll.nativeapp.scrolling.ScrollAction
 import dev.autoscroll.nativeapp.session.GestureSessionState
 import dev.autoscroll.nativeapp.session.SessionDiagnostics
 import dev.autoscroll.nativeapp.settings.NativeSettings
+import dev.autoscroll.nativeapp.settings.ControlMode
 
 @Composable
 internal fun HandScrollScreen(
@@ -51,13 +52,18 @@ internal fun HandScrollScreen(
     onSettingsChange: (NativeSettings) -> Unit,
     onTestAction: (ScrollAction) -> Unit,
     onPractice: (() -> Unit)? = null,
+    pointerConsent: Boolean = false,
+    pointerCalibrated: Boolean = false,
+    onPointerConsent: () -> Unit = {},
 ) {
     var page by rememberSaveable { mutableStateOf("Home") }
     var disclosure by rememberSaveable { mutableStateOf(false) }
     var showSetup by rememberSaveable { mutableStateOf(false) }
     var advanced by rememberSaveable { mutableStateOf(false) }
     var applyMessage by remember { mutableStateOf<String?>(null) }
-    val ready = readyToStart(cameraGranted, accessibility, consent, settings.overlayEnabled, overlayGranted)
+    val pointerMode = settings.controlMode == ControlMode.POINTER
+    val ready = readyToStart(cameraGranted, accessibility, consent, settings.overlayEnabled, overlayGranted,
+        settings.controlMode, pointerConsent, pointerCalibrated || state == GestureSessionState.Active || state == GestureSessionState.Starting)
     val dirty = draft != settings
     Surface(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
@@ -81,7 +87,18 @@ internal fun HandScrollScreen(
                         ElevatedCard(Modifier.fillMaxWidth()) {
                             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text(status(state), style = MaterialTheme.typography.titleLarge)
+                                Text("Control mode: ${if (pointerMode) "Pointer" else "Scroll"}")
                                 Text(if (ready) "Ready to use" else "Finish the required setup below")
+                                if (pointerMode && state != GestureSessionState.Active && state != GestureSessionState.Starting) {
+                                    Text(if (pointerCalibrated) "Practice calibration is ready for one new Start."
+                                        else "Calibrate in Practice, then choose Use calibration. Return here and press Start explicitly.")
+                                    if (!pointerCalibrated && onPractice != null) OutlinedButton(onClick = onPractice,
+                                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Calibrate in Practice") }
+                                }
+                                if (pointerMode && diagnostics.pointer != null) {
+                                    Text("Pointer: ${diagnostics.pointer.phase.name.lowercase().replace('_', ' ')}")
+                                    diagnostics.pointer.message?.let { Text(it) }
+                                }
                                 if (state is GestureSessionState.Error) Text(state.reason, color = MaterialTheme.colorScheme.error)
                                 Button(onClick = { if (state == GestureSessionState.Active) onPause() else onStart() },
                                     enabled = state != GestureSessionState.Starting && (state == GestureSessionState.Active || ready),
@@ -95,7 +112,10 @@ internal fun HandScrollScreen(
                                 }
                                 TextButton(onClick = onStop, enabled = state != GestureSessionState.Stopped,
                                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Stop") }
-                                Text(if (state == GestureSessionState.Active) "Switch to your feed when ready. Pause releases the camera."
+                                Text(if (pointerMode) {
+                                    if (state == GestureSessionState.Active) "Switch to your target app. The cursor hides over Scroll Vision and blocked screens. Pause releases the camera and clears calibration."
+                                    else "Pointer needs a fresh Practice calibration after Pause, Stop, Apply or a screen-size/orientation change. All hand tracking stays on this device."
+                                } else if (state == GestureSessionState.Active) "Switch to your feed when ready. Pause releases the camera."
                                     else "Start or Resume here before switching to your feed. All hand tracking stays on this device.",
                                     style = MaterialTheme.typography.bodyMedium)
                             }
@@ -109,7 +129,8 @@ internal fun HandScrollScreen(
                         }
                         if (!ready || showSetup) {
                             Text("Permission checklist", style = MaterialTheme.typography.titleLarge)
-                            Text("Complete camera and accessibility access. Floating controls and notifications are optional.")
+                            Text(if (pointerMode) "Complete camera, pointer accessibility consent, cursor overlay access and Practice calibration. Floating controls and notifications remain optional."
+                                else "Complete camera and accessibility access. Floating controls and notifications are optional.")
                             if (permissionError != null) Text(permissionError, color = MaterialTheme.colorScheme.error)
                             SetupStep("1 · Camera", cameraGranted,
                                 "Your front camera detects your hand. Images are processed on your device, never recorded or sent to a server.") {
@@ -120,22 +141,27 @@ internal fun HandScrollScreen(
                                     }
                                 }
                             }
-                            SetupStep("2 · Accessibility", accessibility && consent,
-                                "Sends the swipes and taps you request. Screen content, typed text and passwords are not read.") {
-                                if (!accessibility || !consent) Text("Read and agree to the disclosure, then enable Scroll Vision gestures in Android Settings. If Android restricts access, open App info and review its restricted settings option.")
+                            SetupStep("2 · Accessibility", accessibility && consent && (!pointerMode || pointerConsent),
+                                if (pointerMode) "Pointer touches use the cursor location: press, hold, drag and release. Screen content, typed text and passwords are not read."
+                                else "Sends the swipes and taps you request. Screen content, typed text and passwords are not read.") {
+                                if (!accessibility || !consent || pointerMode && !pointerConsent) Text("Read and agree to the disclosure, then enable Scroll Vision gestures in Android Settings. If Android restricts access, open App info and review its restricted settings option.")
                                 OutlinedButton(onClick = { disclosure = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-                                    Text(if (accessibility && consent) "Review access" else "Review and enable accessibility")
+                                    Text(if (accessibility && consent && (!pointerMode || pointerConsent)) "Review access" else "Review and enable accessibility")
                                 }
                             }
-                            SetupStep("3 · Floating controls · optional", !settings.overlayEnabled || overlayGranted,
-                                if (!settings.overlayEnabled) "Skipped. You can enable these later in Settings."
+                            SetupStep(if (pointerMode) "3 · Cursor overlay · required" else "3 · Floating controls · optional",
+                                if (pointerMode) overlayGranted else !settings.overlayEnabled || overlayGranted,
+                                if (pointerMode) "The pointer cursor needs display-over-other-apps access, even when Floating controls are off. Floating controls stay an independent option."
+                                else if (!settings.overlayEnabled) "Skipped. You can enable these later in Settings."
                                 else "Pause or Stop over your feed. Open the app to Resume. You can drag the status bubble.") {
-                                if (settings.overlayEnabled && !overlayGranted) {
-                                    OutlinedButton(onClick = onOverlayPermission, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Allow floating controls") }
+                                if ((settings.overlayEnabled || pointerMode) && !overlayGranted) {
+                                    OutlinedButton(onClick = onOverlayPermission, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(if (pointerMode) "Allow cursor overlay" else "Allow floating controls") }
+                                    if (!pointerMode) {
                                     TextButton(onClick = {
                                         onDraftChange(draft.copy(overlayEnabled = false))
                                         onSettingsChange(settings.copy(overlayEnabled = false))
                                     }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Skip floating controls") }
+                                    }
                                 }
                             }
                             SetupStep("4 · Notifications · optional", !notificationRequired,
@@ -150,8 +176,14 @@ internal fun HandScrollScreen(
                     }
                     "Gestures" -> {
                         Text("Learn your gestures", style = MaterialTheme.typography.titleLarge)
-                        Text("Current mode: ${modeLabel(settings.mode)}${if (settings.inverted) " · direction reversed" else ""}. Keep your whole hand visible and well lit.")
+                        Text(if (pointerMode) "Current mode: Pointer. Keep one whole hand visible and well lit."
+                            else "Current mode: ${modeLabel(settings.mode)}${if (settings.inverted) " · direction reversed" else ""}. Keep your whole hand visible and well lit.")
                         if (onPractice != null) Button(onClick = onPractice, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text("Practice safely") }
+                        if (pointerMode) {
+                            Text("Calibrate two comfortable corners in Practice with the screen buttons, then choose Use calibration. Home Start is always a separate action.")
+                            Text("Extend your index finger to aim. Pinch thumb and index finger to press; keep pinched to hold; move while pinched to drag; separate to release. Start with fingers separated and a steady hand.")
+                            Text("The cursor hides on tracking loss, your floating controls, Scroll Vision, screen lock and blocked apps. A target-app change cancels the current gesture. Reacquire with separated fingers; never resume a held pinch automatically.")
+                        } else {
                         if (settings.mode == GestureMode.HYBRID || settings.mode == GestureMode.POSE) {
                             GestureCard(if (settings.inverted) "Previous item" else "Next item", HandDrawing.DOWN,
                                 "Point your index finger down. Curl the other fingers.", "Holding this pose can repeat after the rearm delay and fresh confirmation.")
@@ -182,6 +214,7 @@ internal fun HandScrollScreen(
                             }
                         }
                         Text("Pause before sensitive interactions: gesture actions can interrupt a finger touch. System settings, permission screens, launcher and Scroll Vision are blocked targets. Screen lock pauses tracking; process restart stays stopped.", style = MaterialTheme.typography.bodyMedium)
+                        }
                     }
                     else -> {
                         Text(if (advanced) "Advanced" else "Settings", style = MaterialTheme.typography.titleLarge)
@@ -199,7 +232,7 @@ internal fun HandScrollScreen(
                         if (advanced) {
                             TextButton(onClick = { advanced = false }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Back to everyday settings") }
                             AdvancedSettingsPanel(draft, state, diagnostics,
-                                canTest = accessibility && consent && state == GestureSessionState.Stopped,
+                                canTest = !pointerMode && accessibility && consent && state == GestureSessionState.Stopped,
                                 manualRunning = manualRunning, manualResult = manualResult,
                                 update = { onDraftChange(it); applyMessage = null }, test = onTestAction)
                         } else {
@@ -214,13 +247,14 @@ internal fun HandScrollScreen(
     }
     if (disclosure) AlertDialog(
         onDismissRequest = { disclosure = false },
-        title = { Text("Allow gesture controlled screen actions") },
+        title = { Text(if (pointerMode) "Allow pointer controlled screen actions" else "Allow gesture controlled screen actions") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                Text("Scroll Vision uses Android Accessibility to send vertical swipes, center single taps, and center double taps requested by your hand gestures or external test buttons in other apps. It receives only the current app's package name to block unsafe targets. It does not read screen content, text, or passwords. Actions may interrupt an ongoing touch. You can pause, stop, or disable the service in Android Settings at any time.")
+                Text(if (pointerMode) "Scroll Vision uses Android Accessibility to send a touch at the pointer cursor: pinch to press, keep pinched to hold, move while pinched to drag, and separate to release. A short press becomes a tap. Other apps decide how these touches behave. It receives only the current app's package name to block unsafe targets; it does not read screen content, text or passwords. Touches may interrupt manual input. Pause, Stop, tracking loss, lock or an app change ends the gesture; an already submitted segment may finish first, and a target's long-press action cannot always be undone. Camera images stay on your device. You can pause, stop or disable the service in Android Settings at any time."
+                    else "Scroll Vision uses Android Accessibility to send vertical swipes, center single taps, and center double taps requested by your hand gestures or external test buttons in other apps. It receives only the current app's package name to block unsafe targets. It does not read screen content, text, or passwords. Actions may interrupt an ongoing touch. You can pause, stop, or disable the service in Android Settings at any time.")
             }
         },
-        confirmButton = { TextButton(onClick = { disclosure = false; onAccessibilityConsent() },
+        confirmButton = { TextButton(onClick = { disclosure = false; if (pointerMode) onPointerConsent() else onAccessibilityConsent() },
             modifier = Modifier.heightIn(min = 48.dp)) { Text("I agree · open Settings") } },
         dismissButton = { TextButton(onClick = { disclosure = false }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Cancel") } },
     )
@@ -309,7 +343,9 @@ private fun HandIllustration(drawing: HandDrawing) {
     }
 }
 
-private fun compactGuide(settings: NativeSettings) = when (settings.mode) {
+private fun compactGuide(settings: NativeSettings) = if (settings.controlMode == ControlMode.POINTER)
+    "Point to aim. Pinch to press, keep pinched to hold, move while pinched to drag, separate to release. Calibrate in Practice before each new external session."
+    else when (settings.mode) {
     GestureMode.POSE -> "Point down/up to navigate. Open hand: tap video once. Thumbs-up: double tap. Pointing and thumbs-up can repeat."
     GestureMode.HYBRID -> "Point down/up or flick to navigate; move your palm to scroll. Open hand: tap video once. Thumbs-up: double tap."
     GestureMode.FLICK -> "Flick your palm down/up to navigate. Settle your hand before repeating. Pose taps are off in this mode."
