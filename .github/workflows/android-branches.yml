@@ -36,7 +36,7 @@ jobs:
         run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
 
       - name: Run unit tests
-        run: sh ./gradlew :gesture:test :app:testDebugUnitTest
+        run: bash ./gradlew :gesture:test :app:testDebugUnitTest
 
       - name: Build Debug APK
-        run: sh ./gradlew :app:assembleDebug
+        run: bash ./gradlew :app:assembleDebug

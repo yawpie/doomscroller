@@ -34,7 +34,7 @@ From the repository root on Windows:
 .\gradlew.bat :gesture:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease :app:assembleDebugAndroidTest
 ```
 
-On Unix use `sh ./gradlew` with the same tasks. CI runs that command on every push
+On Unix use `bash ./gradlew` with the same tasks. CI runs that command on every push
 and pull request. Release APKs are unsigned; signing is a separate distribution
 step. Instrumentation compilation is not device execution.
 

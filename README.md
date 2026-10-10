@@ -27,7 +27,7 @@ From this directory on Windows:
 adb -s <test-device-serial> install -r app\build\outputs\apk\debug\app-debug.apk
 ```
 
-On Unix use `sh ./gradlew` with the same tasks. For instrumentation on a selected
+On Unix use `bash ./gradlew` with the same tasks. For instrumentation on a selected
 test device, set `ANDROID_SERIAL` and run `:app:connectedDebugAndroidTest`.
 Conditional permission tests may skip; check the report. The application ID
 `dev.autoscroll.nativeapp` and existing preference keys are preserved. Debug
