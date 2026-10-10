@@ -6,6 +6,7 @@ import android.os.SystemClock
 import androidx.lifecycle.LifecycleOwner
 import dev.autoscroll.nativeapp.camera.CameraController
 import dev.autoscroll.nativeapp.gesture.HandLandmark
+import dev.autoscroll.nativeapp.gesture.PointerArea
 import dev.autoscroll.nativeapp.session.GestureSessionState
 import dev.autoscroll.nativeapp.session.SessionMachine
 import dev.autoscroll.nativeapp.session.SessionStore
@@ -44,12 +45,37 @@ internal class PracticeController(
     private var watchdog: Job? = null
     private var feedback: PracticeFeedback? = null
     private var disposed = false
+    private var pointerBoardWidth = 0
+    private var pointerBoardHeight = 0
+    private var pointerTargetPixels = 0.0
+    val calibratedArea: PointerArea? get() = feedback?.pointer?.calibration?.area
+
+    fun capturePointerCorner() {
+        if (machine.state != GestureSessionState.Active) return
+        feedback?.let { local ->
+            local.capturePointerCorner(SystemClock.elapsedRealtime())
+            mutableState.value = mutableState.value.copy(sample = local.state)
+        }
+    }
+
+    fun resetPointerCalibration() {
+        feedback?.let { local ->
+            local.resetPointerCalibration()
+            mutableState.value = mutableState.value.copy(sample = local.state)
+        }
+    }
+
+    fun setPointerBoard(width: Int, height: Int, targetPixels: Double) {
+        pointerBoardWidth = width; pointerBoardHeight = height; pointerTargetPixels = targetPixels
+        feedback?.pointer?.setBounds(width, height, targetPixels)
+    }
 
     fun start(settings: NativeSettings) {
         if (disposed || !store.practiceOpen || !visible()) return
         if (!cameraAllowed()) { fail("Allow camera access before starting practice."); return }
         val token = machine.start() ?: return
         val local = PracticeFeedback(settings)
+        local.pointer?.setBounds(pointerBoardWidth, pointerBoardHeight, pointerTargetPixels)
         feedback = local
         mutableState.value = PracticeState(machine.state, message = "Waiting for the previous camera session to close…")
         waiting = scope.launch {
@@ -65,7 +91,8 @@ internal class PracticeController(
                         if (canReceive(token)) {
                             machine.ready(token)
                             lastResultMs = SystemClock.elapsedRealtime()
-                            mutableState.value = PracticeState(machine.state, local.process(result),
+                            mutableState.value = mutableState.value.copy(session = machine.state,
+                                sample = local.process(result, SystemClock.elapsedRealtime()), message = null,
                                 landmarks = result.pose?.landmarks.orEmpty())
                         }
                     },
@@ -87,8 +114,7 @@ internal class PracticeController(
                             machine.state == GestureSessionState.Active && elapsed > 5_000 ->
                                 fail("Camera results stopped. Check camera access, then retry.")
                             machine.state == GestureSessionState.Active && elapsed > settings.tracking.lostAfterMs -> {
-                                mutableState.value = PracticeState(machine.state, local.process(
-                                    dev.autoscroll.nativeapp.gesture.HandTrackingResult(SystemClock.elapsedRealtime())))
+                                mutableState.value = PracticeState(machine.state, local.loseTracking(SystemClock.elapsedRealtime()))
                             }
                         }
                     }

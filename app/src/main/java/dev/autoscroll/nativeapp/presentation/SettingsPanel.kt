@@ -17,6 +17,7 @@ import dev.autoscroll.nativeapp.scrolling.ScrollAction
 import dev.autoscroll.nativeapp.session.SessionDiagnostics
 import dev.autoscroll.nativeapp.session.GestureSessionState
 import dev.autoscroll.nativeapp.settings.NativeSettings
+import dev.autoscroll.nativeapp.settings.ControlMode
 import dev.autoscroll.nativeapp.settings.SettingsGroup
 import dev.autoscroll.nativeapp.settings.reset
 import java.util.Locale
@@ -24,6 +25,16 @@ import kotlin.math.roundToLong
 
 @Composable
 internal fun SettingsPanel(value: NativeSettings, update: (NativeSettings) -> Unit) {
+    Text("Control mode", style = MaterialTheme.typography.titleMedium)
+    ControlMode.entries.forEach { mode ->
+        Row(Modifier.fillMaxWidth().selectable(value.controlMode == mode, role = Role.RadioButton,
+            onClick = { update(value.copy(controlMode = mode)) }).heightIn(min = 48.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            RadioButton(value.controlMode == mode, onClick = null)
+            Text(if (mode == ControlMode.SCROLL) "Scroll" else "Pointer · tap, hold and drag")
+        }
+    }
+    Text("Pointer uses one hand. Calibrate in Practice before controlling another app.")
     SettingSwitch("Reverse scroll direction", "Swap which way pointing and hand movement scroll.", value.inverted) {
         update(value.copy(inverted = it))
     }
@@ -52,6 +63,7 @@ internal fun AdvancedSettingsPanel(value: NativeSettings, state: GestureSessionS
     test: (ScrollAction) -> Unit) {
     Text("Tune recognition only if needed. Reset changes one group in this draft; use Apply changes to save.")
     AdvancedGroup("Recognition mode", { update(value.reset(SettingsGroup.RECOGNITION)) }) {
+        Text("These recognition options apply to Scroll.")
         GestureMode.entries.forEach { mode ->
             Row(Modifier.fillMaxWidth().selectable(value.mode == mode, role = Role.RadioButton,
                 onClick = { update(value.copy(mode = mode)) }).heightIn(min = 48.dp),

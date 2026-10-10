@@ -1,6 +1,7 @@
 package dev.autoscroll.nativeapp.session
 
 import dev.autoscroll.nativeapp.mediapipe.InferenceMetrics
+import dev.autoscroll.nativeapp.gesture.PointerArea
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.CompletableDeferred
@@ -19,6 +20,8 @@ data class SessionDiagnostics(
 )
 
 class SessionStore {
+    // Explicit practice handoff, consumed by a new external Start; never persisted.
+    var pointerCalibration: PointerArea? = null
     val machine = SessionMachine()
     private val mutableState = MutableStateFlow<GestureSessionState>(machine.state)
     private val mutableDiagnostics = MutableStateFlow(SessionDiagnostics())

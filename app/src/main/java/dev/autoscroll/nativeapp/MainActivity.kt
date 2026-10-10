@@ -96,7 +96,15 @@ class MainActivity : ComponentActivity() {
                     val practiceState by practice.state.collectAsStateWithLifecycle()
                     PracticeScreen(practiceState, settings, cameraGranted, cameraBlocked, cameraExplanation, permissionError,
                         onCameraPermission = requestCamera, onStart = { practice.start(settings) },
-                        onStop = { practice.stop() }, onExit = ::leavePractice)
+                        onStop = { practice.stop() }, onExit = ::leavePractice,
+                        onCaptureCorner = practice::capturePointerCorner,
+                        onResetCalibration = practice::resetPointerCalibration,
+                        onUseCalibration = {
+                            practice.calibratedArea?.let { area ->
+                                app.session.pointerCalibration = area
+                                leavePractice()
+                            }
+                        }, onPointerBoardSize = practice::setPointerBoard)
                 } else savedScreens.SaveableStateProvider("main") {
                     HandScrollScreen(
                     state = state,

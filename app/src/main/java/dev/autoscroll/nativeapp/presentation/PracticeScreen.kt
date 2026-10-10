@@ -22,12 +22,16 @@ import dev.autoscroll.nativeapp.practice.PracticeSample
 import dev.autoscroll.nativeapp.practice.PracticeState
 import dev.autoscroll.nativeapp.session.GestureSessionState
 import dev.autoscroll.nativeapp.settings.NativeSettings
+import dev.autoscroll.nativeapp.settings.ControlMode
+import dev.autoscroll.nativeapp.practice.PracticePointerSample
 import kotlin.math.roundToInt
 
 @Composable
 internal fun PracticeScreen(state: PracticeState, settings: NativeSettings, cameraGranted: Boolean,
     cameraBlocked: Boolean, cameraExplanation: String?, permissionError: String?,
-    onCameraPermission: () -> Unit, onStart: () -> Unit, onStop: () -> Unit, onExit: () -> Unit) {
+    onCameraPermission: () -> Unit, onStart: () -> Unit, onStop: () -> Unit, onExit: () -> Unit,
+    onCaptureCorner: () -> Unit = {}, onResetCalibration: () -> Unit = {}, onUseCalibration: () -> Unit = {},
+    onPointerBoardSize: (Int, Int, Double) -> Unit = { _, _, _ -> }) {
     BackHandler(onBack = onExit)
     var showHandTracking by rememberSaveable { mutableStateOf(true) }
     Surface(Modifier.fillMaxSize()) {
@@ -50,7 +54,7 @@ internal fun PracticeScreen(state: PracticeState, settings: NativeSettings, came
                     verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     TextButton(onClick = onExit, modifier = Modifier.heightIn(min = 48.dp)) { Text("Back to Gestures") }
                     Text("Practice safely", style = MaterialTheme.typography.headlineSmall)
-                    Text("Only this sample feed responds. No actions go to other apps. Camera images stay on your device.")
+                    Text("Only this local practice responds. No actions go to other apps. Camera images stay on your device.")
                     Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
                         .toggleable(value = showHandTracking, role = Role.Switch, onValueChange = { showHandTracking = it }),
                         verticalAlignment = Alignment.CenterVertically) {
@@ -86,6 +90,11 @@ internal fun PracticeScreen(state: PracticeState, settings: NativeSettings, came
                                 style = MaterialTheme.typography.bodyMedium)
                         }
                     }
+                    if (settings.controlMode == ControlMode.POINTER) {
+                        PointerPracticePanel(state.sample.pointer ?: PracticePointerSample(),
+                            state.session == GestureSessionState.Active, onCaptureCorner, onResetCalibration,
+                            onUseCalibration, onPointerBoardSize)
+                    } else {
                     Text("Current mode: ${modeLabel(settings.mode)}${if (settings.inverted) " · direction reversed" else ""}")
                     SampleFeed(state.sample)
                     Text("Try a gesture", style = MaterialTheme.typography.titleMedium)
@@ -100,6 +109,7 @@ internal fun PracticeScreen(state: PracticeState, settings: NativeSettings, came
                         Text("Move your palm vertically to move the sample feed; hold still to stop. In Hybrid, curl your fingers and relax your thumb. Poses and flicks take priority.")
                     Text("Tap video changes playback. Stop practice releases the camera. Local movement is a demonstration; real feeds may respond differently.",
                         style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
             }
         }
@@ -117,6 +127,12 @@ private fun PracticeLiveFeedback(state: PracticeState, settings: NativeSettings,
                 is GestureSessionState.Error -> "Practice needs attention"
                 else -> "Practice stopped"
             }, style = MaterialTheme.typography.titleMedium)
+            if (settings.controlMode == ControlMode.POINTER) {
+                val pointer = state.sample.pointer
+                Text(pointerPhaseLabel(pointer?.feedback?.phase ?: PointerPhase.UNCALIBRATED), style = MaterialTheme.typography.bodyMedium)
+                Text(pointer?.feedback?.message ?: "Point with your index finger. Pinch to press, move to drag, separate to release.")
+                Text("Last result: ${pointer?.lastResult ?: "No touch yet"}", style = MaterialTheme.typography.bodyMedium)
+            } else {
             Text("Last action: ${state.sample.lastAction}", style = MaterialTheme.typography.bodyMedium)
             Text("Confirmed actions: ${state.sample.actionCount} · Double taps: ${state.sample.doubleTaps}",
                 style = MaterialTheme.typography.bodyMedium)
@@ -135,6 +151,7 @@ private fun PracticeLiveFeedback(state: PracticeState, settings: NativeSettings,
             }
             if (state.sample.velocity != 0.0) Text("Feed moves while your palm moves. Hold still to stop.",
                 style = MaterialTheme.typography.bodyMedium)
+            }
         }
     }
 }

@@ -12,6 +12,7 @@ class SettingsStore(context: Context) {
         preferences.getString(key, null)?.toDoubleOrNull()?.takeIf { it.isFinite() } ?: fallback
     private val mutable = MutableStateFlow(runCatching {
         NativeSettings(
+            controlMode = controlModeFromPreference(preferences.getString("controlMode", null)),
             mode = GestureMode.valueOf(preferences.getString("mode", "HYBRID")!!),
             inverted = preferences.getBoolean("inverted", false),
             overlayEnabled = preferences.getBoolean("overlay", true),
@@ -57,6 +58,7 @@ class SettingsStore(context: Context) {
         require(settings.pose.cooldownMs in 200..3000)
         mutable.value = settings
         preferences.edit().apply {
+            putString("controlMode", settings.controlMode.name)
             putString("mode", settings.mode.name)
             putBoolean("inverted", settings.inverted)
             putBoolean("overlay", settings.overlayEnabled)
