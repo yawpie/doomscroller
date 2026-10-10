@@ -51,5 +51,4 @@ $env:ANDROID_SERIAL = '<test-device-serial>'
 - Perbarui dokumentasi perilaku yang terdampak; bedakan rencana dari implementasi dan bukti pengujian.
 - Akurasi kamera, respons feed, dan performa berkelanjutan memerlukan [docs/device-validation.md](docs/device-validation.md); build sukses bukan bukti penerimaan fisik.
 
-## Atribusi Commit
-- Commit yang dibuat AI wajib menyertakan trailer `Co-Authored-By: <nama model dan byline atribusi resminya>` sesuai identitas agent yang digunakan; jangan mengarang identitas atau alamat email.
+
