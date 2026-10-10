@@ -4,9 +4,18 @@ Do not treat compiler, synthetic landmark fixtures, or Android dispatch callback
 
 ## Build/install and prerequisites
 
-Use the commands in ../README.md. Install the debug APK and open Hand Scroll Native. Finish each permission through the dashboard yourself; no special permission is automatically granted. First open a feed app, return to Hand Scroll, keep camera Stopped, and press Swipe forward/backward. The task backgrounds and executes one action after one second. Confirm the correct page change independently of the API result. If no feed is behind the task, the launcher is rejected.
+Use the commands in ../README.md. Install the debug APK and open Scroll Vision. Finish each permission through Home's checklist yourself; no special permission is automatically granted. First open a feed app, return to Scroll Vision, keep tracking Stopped, and use Settings → Advanced → External action tests. The task backgrounds and executes one action after one second. Confirm the correct page change independently of the API result. If no feed is behind the task, the launcher is rejected.
 
-Then Start from the visible dashboard, wait for Active, switch to the feed. Tap/drag the floating status bubble to expand/move it. Test pause (camera off), explicit Resume from the app, Stop (overlay/notification gone), each direction and inversion. Camera-free diagnostics require Stopped, so press Stop to clear a retained Error session first.
+Then Start from Home, wait for Tracking, switch to the feed. Tap/drag the floating status bubble to expand/move it. Test Pause (camera off), explicit Resume from Home, Stop (overlay/notification gone), each direction and inversion. External tests require Stopped, so press Stop to clear a retained Error session first. Diagnostics are grouped under Advanced.
+
+Before external trials, use Gestures → Practice safely with camera access only.
+Confirm no accessibility/overlay requirement, explicit Start practice, live hand/no
+hand feedback, local navigation/playback/double taps and repeats in each saved mode
+and inversion. Verify entry pauses normal tracking and cancels pending tests;
+Stop/Back/background/lock/rotation release capture, discard late callbacks and
+never restart automatically. Normal tracking needs explicit Home Start/Resume.
+Local feedback proves neither physical recognition accuracy nor another feed's
+response; record those as separate trials.
 
 ## Trial matrix
 
@@ -33,7 +42,7 @@ At least a limited-performance device and a newer device should be tested when a
 
 ## Benchmark collection
 
-Use the Diagnostics screen's delivered analyzer FPS, effective inference FPS, completed/skipped/stale counts and conversion+inference latency summary. Record frame-arrival-to-dispatch latency separately from observed page-change latency. Do not subtract sensor capture timestamps from elapsedRealtime without first verifying their clock source. CameraX hidden drops are not measured.
+Use Settings → Advanced → Diagnostics for delivered analyzer FPS, effective inference FPS, completed/skipped/stale counts and conversion+inference latency summary. Record frame-arrival-to-dispatch latency separately from observed page-change latency. Do not subtract sensor capture timestamps from elapsedRealtime without first verifying their clock source. CameraX hidden drops are not measured.
 
 Collect a 5-minute steady session and 20-minute thermal/battery session after warm-up, with no per-frame production logging. Record CPU, memory/PSS, thermal status, battery start/end/elapsed using Android Studio Profiler and read-only device diagnostics. For example:
 
@@ -50,7 +59,7 @@ Only compare Flutter/native runs on the same device, model, dimension, settings,
 
 ## Troubleshooting / limits
 
-- Permission or privacy error: check the corresponding Android settings; Stop then explicitly Start while the dashboard is visible.
+- Permission or privacy error: check the corresponding Android settings; Stop then explicitly Start from Home, or Start practice in practice.
 - Pause stops capture; use app Resume after unlock or permission recovery. OEM low-memory/battery rules may kill the process.
 - Gesture is classified but action rejected: check accessibility connection, camera session state, target window, busy/freshness, overlay-interaction quiet period and screen lock. Recognition candidates discarded during overlay interaction must be reconfirmed afterwards.
 - Swipe completes without page change: target app behavior, swipe distance/duration, feed placement or a touch-slop threshold can differ. Calibrate actual target; completion is not navigation proof.

@@ -16,3 +16,19 @@ data class NativeSettings(
     val swipeDistance: Double = 0.5,
 )
 
+enum class SettingsGroup { RECOGNITION, SWIPE, CAMERA, POSES, FLICK, MOVEMENT }
+
+fun NativeSettings.reset(group: SettingsGroup): NativeSettings {
+    val defaults = NativeSettings()
+    return when (group) {
+        SettingsGroup.RECOGNITION -> copy(mode = defaults.mode)
+        SettingsGroup.SWIPE -> copy(swipeDurationMs = defaults.swipeDurationMs, swipeDistance = defaults.swipeDistance,
+            scroll = scroll.copy(flickDurationMs = defaults.scroll.flickDurationMs))
+        SettingsGroup.CAMERA -> copy(tracking = defaults.tracking)
+        SettingsGroup.POSES -> copy(pose = defaults.pose)
+        SettingsGroup.FLICK -> copy(flick = defaults.flick)
+        SettingsGroup.MOVEMENT -> copy(motion = defaults.motion,
+            scroll = scroll.copy(pixelsPerNormalizedUnit = defaults.scroll.pixelsPerNormalizedUnit))
+    }
+}
+
