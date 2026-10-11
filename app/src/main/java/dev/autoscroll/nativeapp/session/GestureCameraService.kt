@@ -23,11 +23,19 @@ import dev.autoscroll.nativeapp.MainActivity
 import dev.autoscroll.nativeapp.accessibility.AccessibilityScrollAdapter
 import dev.autoscroll.nativeapp.accessibility.GestureAccessibilityService
 import dev.autoscroll.nativeapp.accessibility.SwipeConfig
+import dev.autoscroll.nativeapp.accessibility.ScreenPoint
+import dev.autoscroll.nativeapp.accessibility.PointerContactState
+import dev.autoscroll.nativeapp.accessibility.PointerDispatchSample
+import dev.autoscroll.nativeapp.accessibility.pointerScreenPoint
+import dev.autoscroll.nativeapp.accessibility.screenContentBounds
 import dev.autoscroll.nativeapp.camera.CameraController
 import dev.autoscroll.nativeapp.gesture.*
 import dev.autoscroll.nativeapp.overlay.OverlayController
+import dev.autoscroll.nativeapp.overlay.PointerCursorController
+import dev.autoscroll.nativeapp.settings.ControlMode
 import dev.autoscroll.nativeapp.scrolling.ScrollAction
 import dev.autoscroll.nativeapp.scrolling.ScrollActionCoordinator
+import dev.autoscroll.nativeapp.scrolling.ScrollExecutionResult
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
@@ -40,7 +48,15 @@ class GestureCameraService : LifecycleService() {
     private val machine get() = store.machine
     private val adapter = AccessibilityScrollAdapter(overlayBounds = { overlay?.screenBounds() })
     private lateinit var actions: ScrollActionCoordinator
-    private var gestures: GestureCoordinator? = null
+    private var recognition: SessionRecognition? = null
+    private val gestures get() = recognition?.gestures
+    private var cursor: PointerCursorController? = null
+    private var pendingPointerFeedback: PointerFeedback? = null
+    private var pointerExpiry: Job? = null
+    private var requestedCursorPosition: ScreenPoint? = null
+    private var pendingPointerSample: PointerDispatchSample? = null
+    private var pointerContactVisible = false
+    private var sessionMode = ControlMode.SCROLL
     private var camera: CameraController? = null
     private var overlay: OverlayController? = null
     private var watchdog: Job? = null
@@ -70,7 +86,15 @@ class GestureCameraService : LifecycleService() {
             }
         }
         lifecycleScope.launch {
-            store.visibility.collect { visible -> overlay?.visible(!visible) }
+            store.visibility.collect { visible ->
+                overlay?.visible(!visible)
+                if (visible) cancelPointer("Pointer hidden while Scroll Vision is open")
+            }
+        }
+        lifecycleScope.launch {
+            GestureAccessibilityService.targetState.collect {
+                cancelPointer("Target app changed. Separate your fingers and point steadily.")
+            }
         }
         lifecycleScope.launch {
             app.settings.state.collect { settings ->
@@ -99,6 +123,8 @@ class GestureCameraService : LifecycleService() {
         ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED -> "Camera permission is required."
         !app.settings.accessibilityConsent -> "Confirm the accessibility disclosure first."
         !adapter.isReady -> "Enable Scroll Vision gestures in Android accessibility settings."
+        app.settings.state.value.controlMode == ControlMode.POINTER && !app.settings.pointerAccessibilityConsent -> "Review and agree to the Pointer accessibility disclosure first."
+        app.settings.state.value.controlMode == ControlMode.POINTER && !Settings.canDrawOverlays(this) -> "Allow the cursor overlay before starting Pointer. Floating controls may remain off."
         app.settings.state.value.overlayEnabled && !Settings.canDrawOverlays(this) -> "Allow the floating widget, or disable it in the app."
         else -> null
     }
@@ -106,20 +132,35 @@ class GestureCameraService : LifecycleService() {
     private fun startSession() {
         if (store.practiceOpen) { if (!foreground) stopSelf(); return }
         if (machine.state == GestureSessionState.Active || machine.state == GestureSessionState.Starting) return
+        if (GestureAccessibilityService.pointerDispatchBusy) {
+            diagnostics = diagnostics.copy(rejectionReason = if (GestureAccessibilityService.pointerContact.value.recoveryRequired)
+                "Touch release could not be confirmed. Touch the screen manually, then acknowledge recovery in Home."
+                else "Previous touch is ending. Press Start again after it finishes.")
+            store.diagnostics(diagnostics)
+            if (!foreground) stopSelf()
+            return
+        }
         val error = prerequisites()
         if (error != null) { fail(error); return }
+        val settings = app.settings.state.value
+        val bounds = contentBounds()
+        val calibration = if (settings.controlMode == ControlMode.POINTER) store.takePointerCalibration(bounds, screenRotation()) else null
+        if (settings.controlMode == ControlMode.POINTER && calibration == null) {
+            fail("Calibrate in Practice, choose Use calibration, then return Home and press Start."); return
+        }
         val token = machine.start() ?: return
         try {
+            sessionMode = settings.controlMode
             val notification = notification()
             if (Build.VERSION.SDK_INT >= 30) startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA)
             else startForeground(NOTIFICATION_ID, notification)
             foreground = true
-            val settings = app.settings.state.value
             actions.configure(settings.scroll, settings.inverted)
             adapter.configure(SwipeConfig(startY = 0.5 + settings.swipeDistance / 2,
                 endY = 0.5 - settings.swipeDistance / 2, durationMs = settings.swipeDurationMs))
-            gestures = GestureCoordinator(ContinuousMotionDetector(settings.motion), FlickDetector(settings.flick),
-                HandPoseDetector(settings.pose), settings.mode)
+            recognition = SessionRecognition(settings, calibration, bounds, screenRotation())
+            diagnostics = SessionDiagnostics(pointer = recognition?.pointer?.state)
+            if (sessionMode == ControlMode.POINTER) createCursor(token)
             if (settings.overlayEnabled) createOverlay()
             publish()
             val begin = {
@@ -127,9 +168,12 @@ class GestureCameraService : LifecycleService() {
                     lastResultMs = SystemClock.elapsedRealtime()
                     val controller = CameraController(this, settings.tracking,
                         onResult = { result ->
-                            if (machine.ready(token)) { actions.setSessionActive(true); publish() }
+                            if (machine.ready(token)) { actions.setSessionActive(sessionMode == ControlMode.SCROLL); publish() }
                             if (machine.accepts(token)) {
                                 lastResultMs = SystemClock.elapsedRealtime()
+                                if (sessionMode == ControlMode.POINTER) {
+                                    processPointer(result); return@CameraController
+                                }
                                 if (overlayInteracting || manualSwipe?.isActive == true) return@CameraController
                                 actions.setSessionActive(true)
                                 val wasDetected = diagnostics.handDetected
@@ -166,16 +210,24 @@ class GestureCameraService : LifecycleService() {
                 val settings = app.settings.state.value
                 when {
                     ContextCompat.checkSelfPermission(this@GestureCameraService, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED -> fail("Camera permission was revoked.")
-                    settings.overlayEnabled && !Settings.canDrawOverlays(this@GestureCameraService) -> fail("Floating widget permission was revoked.")
+                    (settings.overlayEnabled || sessionMode == ControlMode.POINTER) && !Settings.canDrawOverlays(this@GestureCameraService) -> fail("Overlay permission was revoked. Allow it, then start again.")
+                    sessionMode == ControlMode.POINTER && recognition?.viewportChanged(contentBounds(), screenRotation()) == true -> {
+                        pauseSession()
+                        diagnostics = diagnostics.copy(rejectionReason = "Screen bounds changed. Calibrate in Practice again.")
+                        store.diagnostics(diagnostics)
+                    }
                     machine.state == GestureSessionState.Starting && SystemClock.elapsedRealtime() - lastResultMs > 15_000 -> fail("Camera did not produce results. Check the camera privacy switch and other camera apps.")
                     machine.state == GestureSessionState.Active && SystemClock.elapsedRealtime() - lastResultMs > settings.tracking.lostAfterMs -> {
                         actions.setSessionActive(false)
                         gestures?.loseTracking()
+                        cancelPointer("Tracking results stopped")
                         diagnostics = diagnostics.copy(handDetected = false, rejectionReason = "Tracking results stopped")
                         store.diagnostics(diagnostics)
                         if (SystemClock.elapsedRealtime() - lastResultMs > 5_000) fail("Camera results stopped. Resume from the app.")
                     }
-                    machine.state == GestureSessionState.Active && !overlayInteracting && manualSwipe?.isActive != true -> actions.setSessionActive(true)
+                    machine.state == GestureSessionState.Active && sessionMode == ControlMode.POINTER && !pointerEligible() ->
+                        cancelPointer("Pointer paused over this screen")
+                    machine.state == GestureSessionState.Active && sessionMode == ControlMode.SCROLL && !overlayInteracting && manualSwipe?.isActive != true -> actions.setSessionActive(true)
                 }
             }
         }
@@ -190,12 +242,133 @@ class GestureCameraService : LifecycleService() {
                 adapter.suspendForInteraction()
                 actions.setSessionActive(false)
                 gestures?.reset()
+                cancelPointer("Floating controls interaction")
             },
         ).also { it.show(); it.visible(!store.activityVisible) }
     }
 
+    @Suppress("DEPRECATION")
+    private fun screenRotation() = getSystemService(android.view.WindowManager::class.java).defaultDisplay.rotation
+    private fun contentBounds() = GestureAccessibilityService.connectedService?.contentBounds() ?: screenContentBounds(this)
+    private fun pointerEligible() = machine.state == GestureSessionState.Active && !store.activityVisible && !overlayInteracting &&
+        !GestureAccessibilityService.pointerContact.value.recoveryRequired &&
+        app.settings.accessibilityConsent && app.settings.pointerAccessibilityConsent &&
+        ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED &&
+        Settings.canDrawOverlays(this) && GestureAccessibilityService.connectedService?.pointerAllowed() == true
+
+    private fun createCursor(token: Long) {
+        cursor = PointerCursorController(this, onPosition = { actual ->
+            if (!machine.accepts(token)) return@PointerCursorController
+            val feedback = pendingPointerFeedback ?: return@PointerCursorController
+            val freshnessMs = recognition?.pointer?.config?.freshnessMs ?: return@PointerCursorController
+            if (!pointerEligible() || !pointerFeedbackFresh(feedback, SystemClock.elapsedRealtime(), freshnessMs)) {
+                cancelPointer("Pointer tracking is no longer fresh or allowed"); return@PointerCursorController
+            }
+            if (recognition?.viewportChanged(contentBounds(), screenRotation()) == true) { pauseSession(); return@PointerCursorController }
+            if (actual == requestedCursorPosition) {
+                pendingPointerFeedback = null
+                val sample = pendingPointerSample
+                pendingPointerSample = null
+                publishPointer(feedback, actual)
+                if (feedback.action == PointerAction.BEGIN && sample != null) {
+                    pointerContactVisible = true
+                    val rejection = adapter.beginPointer(sample.copy(point = actual),
+                        allowed = { !destroyed && machine.accepts(token) && pointerEligible() },
+                        listener = { state -> if (!destroyed && machine.accepts(token)) onPointerContact(state) })
+                    if (rejection != null) cancelPointer("Pointer touch rejected: ${rejection.name}")
+                }
+            }
+        })
+    }
+
+    private fun processPointer(result: HandTrackingResult) {
+        val bounds = contentBounds()
+        if (recognition?.viewportChanged(bounds, screenRotation()) == true) {
+            pauseSession()
+            diagnostics = diagnostics.copy(rejectionReason = "Screen bounds changed. Calibrate in Practice again.")
+            store.diagnostics(diagnostics)
+            return
+        }
+        val feedback = recognition?.process(result, SystemClock.elapsedRealtime(), bounds, pointerEligible())?.pointer ?: return
+        val point = feedback.position?.let { pointerScreenPoint(it, bounds) }
+        if (feedback.action == PointerAction.CANCEL) { cancelPointer(feedback.message ?: "Pointer contact cancelled"); return }
+        if (feedback.action == PointerAction.END) {
+            pendingPointerFeedback = null; pendingPointerSample = null
+            pointerContactVisible = false
+            adapter.endPointer()
+        }
+        if (!feedback.visible || point == null) {
+            pointerExpiry?.cancel(); pointerExpiry = null
+            pendingPointerFeedback = null; pendingPointerSample = null; requestedCursorPosition = null
+            cursor?.hide()
+            publishPointer(feedback, null)
+            return
+        }
+        if (overlay?.screenBounds()?.contains(point.x, point.y) == true) {
+            cancelPointer("Pointer hidden over floating controls")
+            return
+        }
+        pointerExpiry?.cancel()
+        val token = machine.generation
+        val freshnessMs = checkNotNull(recognition?.pointer).config.freshnessMs
+        pointerExpiry = schedulePointerExpiry(lifecycleScope, feedback, freshnessMs, SystemClock::elapsedRealtime) {
+            if (machine.accepts(token)) cancelPointer("Pointer tracking is no longer fresh")
+        }
+        val sample = PointerDispatchSample(point, feedback.timestampMs, bounds, screenRotation(),
+            GestureAccessibilityService.targetState.value.packageName)
+        if (GestureAccessibilityService.pointerContact.value.active) {
+            if (feedback.action == PointerAction.MOVE) adapter.movePointer(sample)
+            if (pointerContactVisible) onPointerContact(GestureAccessibilityService.pointerContact.value, feedback)
+            return
+        }
+        // Do not overwrite an unconsumed BEGIN with a later PRESSED frame before the view has drawn.
+        if (pendingPointerFeedback?.action == PointerAction.BEGIN) return
+        pendingPointerFeedback = feedback
+        pendingPointerSample = sample
+        requestedCursorPosition = point
+        diagnostics = diagnostics.copy(handDetected = result.handDetected,
+            pointer = feedback, cursorPosition = null, rejectionReason = feedback.message)
+        store.diagnostics(diagnostics)
+        try { cursor?.move(point, feedback.phase) }
+        catch (problem: Exception) { fail(problem.message ?: "Cursor overlay could not be shown. Review overlay access.") }
+    }
+
+    private fun onPointerContact(state: PointerContactState, feedback: PointerFeedback? = recognition?.pointer?.state) {
+        if (state.recoveryRequired) {
+            fail("Touch release could not be confirmed. Touch manually, then acknowledge recovery in Home.")
+            return
+        }
+        if (!state.active && state.lastResult != null && state.lastResult != ScrollExecutionResult.COMPLETED) {
+            cancelPointer("Pointer touch ended: ${state.lastResult.name}")
+            return
+        }
+        if (!pointerContactVisible || feedback == null || !feedback.visible || !pointerEligible() ||
+            !pointerFeedbackFresh(feedback, SystemClock.elapsedRealtime(), 300)) return
+        val position = state.position ?: return
+        requestedCursorPosition = position
+        try { cursor?.move(position, if (state.ending) PointerPhase.RELEASING else feedback.phase) }
+        catch (problem: Exception) { fail(problem.message ?: "Cursor overlay could not be shown"); return }
+        publishPointer(feedback, position)
+    }
+
+    private fun publishPointer(feedback: PointerFeedback, position: ScreenPoint?) {
+        diagnostics = diagnostics.copy(pointer = feedback, cursorPosition = position,
+            handDetected = feedback.visible, rejectionReason = feedback.message)
+        store.diagnostics(diagnostics)
+    }
+
+    private fun cancelPointer(reason: String) {
+        pointerContactVisible = false
+        adapter.endPointer(ScrollExecutionResult.CANCELLED)
+        pointerExpiry?.cancel(); pointerExpiry = null
+        pendingPointerFeedback = null; pendingPointerSample = null; requestedCursorPosition = null
+        cursor?.hide()
+        recognition?.pointer?.let { publishPointer(it.cancel(reason), null) }
+    }
+
     private fun openActivity() {
         adapter.suspendForInteraction()
+        cancelPointer("Opening Scroll Vision")
         startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP))
     }
 
@@ -204,7 +377,10 @@ class GestureCameraService : LifecycleService() {
         overlayInteracting = false
         watchdog?.cancel(); watchdog = null
         actions.setSessionActive(false)
-        gestures?.reset(); gestures = null
+        cancelPointer("Session ended")
+        recognition?.reset(); recognition = null
+        cursor?.close(); cursor = null
+        store.invalidatePointerCalibration()
         camera?.let { previous ->
             camera = null
             val teardown = CompletableDeferred<Unit>()
@@ -214,7 +390,7 @@ class GestureCameraService : LifecycleService() {
     }
 
     private fun requestManual(action: ScrollAction) {
-        if (store.practiceOpen || machine.state != GestureSessionState.Active) return
+        if (sessionMode != ControlMode.SCROLL || store.practiceOpen || machine.state != GestureSessionState.Active) return
         manualSwipe?.cancel()
         val token = machine.generation
         actions.setSessionActive(false)
@@ -267,6 +443,7 @@ class GestureCameraService : LifecycleService() {
     }
 
     private fun publishDiagnostics() {
+        if (sessionMode == ControlMode.POINTER) { store.diagnostics(diagnostics); return }
         val now = SystemClock.elapsedRealtime()
         if (now - lastDiagnosticMs < 500) return
         lastDiagnosticMs = now
@@ -283,7 +460,7 @@ class GestureCameraService : LifecycleService() {
         fun command(action: String, id: Int) = PendingIntent.getService(this, id,
             Intent(this, GestureCameraService::class.java).setAction(action), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val text = when (val state = machine.state) {
-            GestureSessionState.Active -> "Camera active · hand gestures control vertical swipes"
+            GestureSessionState.Active -> if (sessionMode == ControlMode.POINTER) "Camera active · index finger controls pointer" else "Camera active · hand gestures control vertical swipes"
             GestureSessionState.Starting -> "Starting camera and hand recognition"
             GestureSessionState.Paused -> "Paused · camera released · open app to resume"
             GestureSessionState.Stopped -> "Stopped"
@@ -301,11 +478,13 @@ class GestureCameraService : LifecycleService() {
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         overlay?.reposition()
+        store.invalidatePointerCalibration()
+        if (sessionMode == ControlMode.POINTER && (machine.state == GestureSessionState.Active || machine.state == GestureSessionState.Starting)) pauseSession()
     }
 
     override fun onDestroy() {
         destroyed = true
-        releaseSession()
+        if (foreground || recognition != null || camera != null) releaseSession()
         store.serviceRunning = false
         store.practicePrepared()
         overlay?.close(); overlay = null

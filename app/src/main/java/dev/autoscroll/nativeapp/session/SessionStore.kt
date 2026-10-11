@@ -1,6 +1,10 @@
 package dev.autoscroll.nativeapp.session
 
 import dev.autoscroll.nativeapp.mediapipe.InferenceMetrics
+import dev.autoscroll.nativeapp.gesture.PointerArea
+import dev.autoscroll.nativeapp.gesture.PointerFeedback
+import dev.autoscroll.nativeapp.accessibility.SwipeBounds
+import dev.autoscroll.nativeapp.accessibility.ScreenPoint
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.CompletableDeferred
@@ -16,9 +20,35 @@ data class SessionDiagnostics(
     val lastAction: String = "None",
     val rejectionReason: String? = null,
     val gestureToActionMs: Long? = null,
+    val pointer: PointerFeedback? = null,
+    val cursorPosition: ScreenPoint? = null,
 )
 
 class SessionStore {
+    // Explicit practice handoff, consumed by a new external Start; never persisted.
+    var pointerCalibration: PointerArea? = null
+        private set
+    private var calibrationBounds: SwipeBounds? = null
+    private var calibrationRotation = 0
+    private val mutablePointerCalibrationReady = MutableStateFlow(false)
+    val pointerCalibrationReady = mutablePointerCalibrationReady.asStateFlow()
+    internal fun preparePointerCalibration(area: PointerArea, bounds: SwipeBounds, rotation: Int) {
+        pointerCalibration = area
+        calibrationBounds = bounds
+        calibrationRotation = rotation
+        mutablePointerCalibrationReady.value = true
+    }
+    internal fun takePointerCalibration(bounds: SwipeBounds, rotation: Int): PointerArea? {
+        val area = pointerCalibration.takeIf { calibrationBounds == bounds && calibrationRotation == rotation }
+        invalidatePointerCalibration()
+        return area
+    }
+    internal fun checkPointerCalibrationBounds(bounds: SwipeBounds, rotation: Int) {
+        if (pointerCalibration != null && (calibrationBounds != bounds || calibrationRotation != rotation)) invalidatePointerCalibration()
+    }
+    fun invalidatePointerCalibration() {
+        pointerCalibration = null; calibrationBounds = null; mutablePointerCalibrationReady.value = false
+    }
     val machine = SessionMachine()
     private val mutableState = MutableStateFlow<GestureSessionState>(machine.state)
     private val mutableDiagnostics = MutableStateFlow(SessionDiagnostics())
@@ -35,6 +65,7 @@ class SessionStore {
     fun acceptsStart(request: Long) = !practiceOpen && request == startRequest
 
     fun enterPractice() {
+        invalidatePointerCalibration()
         practiceOpen = true
         startRequest++
         machine.pause()

@@ -33,7 +33,8 @@ internal fun validLandmarks(points: List<HandLandmark>): Boolean =
             point.x in 0.0..1.0 && point.y in 0.0..1.0
     }
 
-data class HandTrackingResult(val timestampMs: Long, val pose: HandPose? = null) {
+data class HandTrackingResult(val timestampMs: Long, val pose: HandPose? = null, val uprightAspectRatio: Double = 1.0) {
+    init { require(uprightAspectRatio.isFinite() && uprightAspectRatio > 0.0) }
     val handDetected: Boolean get() = pose != null
 }
 

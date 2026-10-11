@@ -12,6 +12,7 @@ class SettingsStore(context: Context) {
         preferences.getString(key, null)?.toDoubleOrNull()?.takeIf { it.isFinite() } ?: fallback
     private val mutable = MutableStateFlow(runCatching {
         NativeSettings(
+            controlMode = controlModeFromPreference(preferences.getString("controlMode", null)),
             mode = GestureMode.valueOf(preferences.getString("mode", "HYBRID")!!),
             inverted = preferences.getBoolean("inverted", false),
             overlayEnabled = preferences.getBoolean("overlay", true),
@@ -51,12 +52,16 @@ class SettingsStore(context: Context) {
     var accessibilityConsent: Boolean
         get() = preferences.getBoolean("accessibilityConsent", false)
         set(value) { preferences.edit().putBoolean("accessibilityConsent", value).apply() }
+    var pointerAccessibilityConsent: Boolean
+        get() = preferences.getBoolean("pointerAccessibilityConsent", false)
+        set(value) { preferences.edit().putBoolean("pointerAccessibilityConsent", value).apply() }
 
     fun update(settings: NativeSettings) {
         require(settings.swipeDurationMs in 100..1000 && settings.swipeDistance in 0.1..0.8)
         require(settings.pose.cooldownMs in 200..3000)
         mutable.value = settings
         preferences.edit().apply {
+            putString("controlMode", settings.controlMode.name)
             putString("mode", settings.mode.name)
             putBoolean("inverted", settings.inverted)
             putBoolean("overlay", settings.overlayEnabled)

@@ -84,9 +84,10 @@ class CameraController(
     private var cleanupComplete = false
     private val closeCallbacks = mutableListOf<() -> Unit>()
 
-    internal data class FrameResult(val pose: HandPose?, val metrics: InferenceMetrics, val preview: Bitmap? = null) {
+    internal data class FrameResult(val pose: HandPose?, val metrics: InferenceMetrics, val preview: Bitmap? = null,
+        val uprightAspectRatio: Double = 1.0) {
         fun resultAt(nowMs: Long, lostAfterMs: Long) = HandTrackingResult(metrics.inputTimestampMs,
-            if (nowMs - metrics.inputTimestampMs < lostAfterMs) pose else null)
+            if (nowMs - metrics.inputTimestampMs < lostAfterMs) pose else null, uprightAspectRatio)
         fun previewAt(nowMs: Long, lostAfterMs: Long) =
             preview?.takeIf { nowMs - metrics.inputTimestampMs < lostAfterMs }
     }
@@ -203,7 +204,8 @@ class CameraController(
             pendingResult.set(FrameResult(if (stale) null else pose,
                 InferenceMetrics(cameraFps, inferenceFps, latencyMs, frame.imageInfo.timestamp,
                     inputNs / 1_000_000, completionMs, throttledFrames, processedFrames, staleFrames,
-                    latencySummary.average, latencySummary.p50, latencySummary.p95, latencySummary.samples), preview))
+                    latencySummary.average, latencySummary.p50, latencySummary.p95, latencySummary.samples), preview,
+                argb.width.toDouble() / argb.height))
             postDelivery()
         } catch (error: Exception) {
             fail(error)

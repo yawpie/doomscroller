@@ -9,6 +9,23 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class SettingsStoreTest {
+    @Test fun controlModePersistsAndMissingKeyLoadsScrollKeepingOldPreferences() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val preferences = context.getSharedPreferences("gesture_settings", android.content.Context.MODE_PRIVATE)
+        val savedKey = preferences.getString("controlMode", null)
+        val store = SettingsStore(context)
+        val original = store.state.value
+        try {
+            store.update(original.copy(controlMode = ControlMode.POINTER))
+            assertEquals(ControlMode.POINTER, SettingsStore(context).state.value.controlMode)
+            preferences.edit().remove("controlMode").commit()
+            assertEquals(original.copy(controlMode = ControlMode.SCROLL), SettingsStore(context).state.value)
+        } finally {
+            store.update(original)
+            if (savedKey == null) preferences.edit().remove("controlMode").commit()
+            else preferences.edit().putString("controlMode", savedKey).commit()
+        }
+    }
     @Test fun rearmDelayPersistsAndReloadsAsTimedRearm() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val store = SettingsStore(context)

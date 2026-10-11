@@ -11,6 +11,7 @@ class AccessibilityScrollAdapter(
     private var config: SwipeConfig = SwipeConfig(),
     private val overlayBounds: () -> Rect? = { null },
 ) : ScrollExecutor {
+    private var pointerOwner: GestureAccessibilityService? = null
     override val isReady: Boolean get() = GestureAccessibilityService.readiness.value
 
     fun configure(config: SwipeConfig) { this.config = config }
@@ -25,4 +26,19 @@ class AccessibilityScrollAdapter(
         val service = GestureAccessibilityService.connectedService ?: return@withContext ScrollExecutionResult.UNAVAILABLE
         service.execute(request, config, overlayBounds())
     }
+
+    internal fun beginPointer(sample: PointerDispatchSample, allowed: () -> Boolean,
+        listener: (PointerContactState) -> Unit): ScrollExecutionResult? {
+        val service = GestureAccessibilityService.connectedService ?: return ScrollExecutionResult.UNAVAILABLE
+        pointerOwner = service
+        val result = service.beginPointer(sample, allowed, overlayBounds) { state ->
+            if (!state.active) pointerOwner = null
+            listener(state)
+        }
+        if (result != null) pointerOwner = null
+        return result
+    }
+
+    internal fun movePointer(sample: PointerDispatchSample) { pointerOwner?.movePointer(sample) }
+    internal fun endPointer(result: ScrollExecutionResult = ScrollExecutionResult.COMPLETED) { pointerOwner?.endPointer(result) }
 }

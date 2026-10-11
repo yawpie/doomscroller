@@ -22,14 +22,24 @@ import dev.autoscroll.nativeapp.practice.PracticeSample
 import dev.autoscroll.nativeapp.practice.PracticeState
 import dev.autoscroll.nativeapp.session.GestureSessionState
 import dev.autoscroll.nativeapp.settings.NativeSettings
+import dev.autoscroll.nativeapp.settings.ControlMode
+import dev.autoscroll.nativeapp.practice.PracticePointerSample
 import kotlin.math.roundToInt
 
 @Composable
 internal fun PracticeScreen(state: PracticeState, settings: NativeSettings, cameraGranted: Boolean,
     cameraBlocked: Boolean, cameraExplanation: String?, permissionError: String?,
-    onCameraPermission: () -> Unit, onStart: () -> Unit, onStop: () -> Unit, onExit: () -> Unit) {
+    onCameraPermission: () -> Unit, onStart: () -> Unit, onStop: () -> Unit, onExit: () -> Unit,
+    onCaptureCorner: () -> Unit = {}, onResetCalibration: () -> Unit = {}, onUseCalibration: () -> Unit = {},
+    onPointerBoardSize: (Int, Int, Double) -> Unit = { _, _, _ -> }) {
     BackHandler(onBack = onExit)
     var showHandTracking by rememberSaveable { mutableStateOf(true) }
+    val pointer = state.sample.pointer
+    var focusedBoard by remember(pointer?.area) { mutableStateOf(false) }
+    if (focusedBoard && settings.controlMode == ControlMode.POINTER && pointer?.area != null && state.session == GestureSessionState.Active) {
+        FocusedPointerPractice(pointer, onStop, { focusedBoard = false }, onPointerBoardSize)
+        return
+    }
     Surface(Modifier.fillMaxSize()) {
         BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(16.dp)) {
             val wide = maxWidth > maxHeight
@@ -39,7 +49,8 @@ internal fun PracticeScreen(state: PracticeState, settings: NativeSettings, came
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         PracticeCameraPreview(state, showHandTracking,
                             Modifier.weight(1f).height(cameraHeight))
-                        PracticeLiveFeedback(state, settings, Modifier.weight(1f))
+                        PracticeLiveFeedback(state, settings, Modifier.weight(1f).then(
+                            if (settings.controlMode == ControlMode.POINTER) Modifier.heightIn(max = cameraHeight) else Modifier))
                     }
                 } else {
                     PracticeCameraPreview(state, showHandTracking,
@@ -50,7 +61,7 @@ internal fun PracticeScreen(state: PracticeState, settings: NativeSettings, came
                     verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     TextButton(onClick = onExit, modifier = Modifier.heightIn(min = 48.dp)) { Text("Back to Gestures") }
                     Text("Practice safely", style = MaterialTheme.typography.headlineSmall)
-                    Text("Only this sample feed responds. No actions go to other apps. Camera images stay on your device.")
+                    Text("Only this local practice responds. No actions go to other apps. Camera images stay on your device.")
                     Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
                         .toggleable(value = showHandTracking, role = Role.Switch, onValueChange = { showHandTracking = it }),
                         verticalAlignment = Alignment.CenterVertically) {
@@ -86,6 +97,11 @@ internal fun PracticeScreen(state: PracticeState, settings: NativeSettings, came
                                 style = MaterialTheme.typography.bodyMedium)
                         }
                     }
+                    if (settings.controlMode == ControlMode.POINTER) {
+                        PointerPracticePanel(state.sample.pointer ?: PracticePointerSample(),
+                            state.session == GestureSessionState.Active, onCaptureCorner, onResetCalibration,
+                            onUseCalibration, onPointerBoardSize, openBoard = { focusedBoard = true })
+                    } else {
                     Text("Current mode: ${modeLabel(settings.mode)}${if (settings.inverted) " · direction reversed" else ""}")
                     SampleFeed(state.sample)
                     Text("Try a gesture", style = MaterialTheme.typography.titleMedium)
@@ -100,6 +116,46 @@ internal fun PracticeScreen(state: PracticeState, settings: NativeSettings, came
                         Text("Move your palm vertically to move the sample feed; hold still to stop. In Hybrid, curl your fingers and relax your thumb. Poses and flicks take priority.")
                     Text("Tap video changes playback. Stop practice releases the camera. Local movement is a demonstration; real feeds may respond differently.",
                         style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FocusedPointerPractice(sample: PracticePointerSample, stop: () -> Unit, back: () -> Unit,
+    sizeChanged: (Int, Int, Double) -> Unit) {
+    BackHandler(onBack = back)
+    Surface(Modifier.fillMaxSize()) {
+        BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(8.dp)) {
+            @Composable fun Controls(modifier: Modifier) {
+                Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Button(onClick = stop, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Stop practice") }
+                    TextButton(onClick = back, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Back to practice") }
+                    Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(pointerPhaseLabel(sample.feedback.phase), style = MaterialTheme.typography.bodyMedium)
+                        Text("${sample.lastResult} · Hold ${sample.holdMs} ms", style = MaterialTheme.typography.bodyMedium)
+                        Text("Tap ${sample.taps} · Hold ${sample.holds} · Drop ${sample.drops}", style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+            if (maxWidth > maxHeight) {
+                val controlsWidth = (maxWidth * .3f).coerceIn(148.dp, 280.dp)
+                Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PointerPracticeBoard(sample, sizeChanged, Modifier.weight(1f).fillMaxHeight())
+                    Controls(Modifier.width(controlsWidth).fillMaxHeight())
+                }
+            } else {
+                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Button(onClick = stop, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text("Stop practice") }
+                        TextButton(onClick = back, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text("Back to practice") }
+                    }
+                    Text("${pointerPhaseLabel(sample.feedback.phase)} · ${sample.holdMs} ms", style = MaterialTheme.typography.bodyMedium)
+                    PointerPracticeBoard(sample, sizeChanged, Modifier.weight(1f).fillMaxWidth())
+                    Text("Tap ${sample.taps} · Hold ${sample.holds} · Drop ${sample.drops}", style = MaterialTheme.typography.bodyMedium)
                 }
             }
         }
@@ -109,7 +165,8 @@ internal fun PracticeScreen(state: PracticeState, settings: NativeSettings, came
 @Composable
 private fun PracticeLiveFeedback(state: PracticeState, settings: NativeSettings, modifier: Modifier) {
     OutlinedCard(modifier) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(Modifier.then(if (settings.controlMode == ControlMode.POINTER) Modifier.verticalScroll(rememberScrollState()) else Modifier)
+            .padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("Live feedback", style = MaterialTheme.typography.titleMedium)
             Text(when (state.session) {
                 GestureSessionState.Starting -> "Starting practice…"
@@ -117,6 +174,12 @@ private fun PracticeLiveFeedback(state: PracticeState, settings: NativeSettings,
                 is GestureSessionState.Error -> "Practice needs attention"
                 else -> "Practice stopped"
             }, style = MaterialTheme.typography.titleMedium)
+            if (settings.controlMode == ControlMode.POINTER) {
+                val pointer = state.sample.pointer
+                Text(pointerPhaseLabel(pointer?.feedback?.phase ?: PointerPhase.UNCALIBRATED), style = MaterialTheme.typography.bodyMedium)
+                Text(pointer?.feedback?.message ?: "Point with your index finger. Pinch to press, move to drag, separate to release.")
+                Text("Last result: ${pointer?.lastResult ?: "No touch yet"}", style = MaterialTheme.typography.bodyMedium)
+            } else {
             Text("Last action: ${state.sample.lastAction}", style = MaterialTheme.typography.bodyMedium)
             Text("Confirmed actions: ${state.sample.actionCount} · Double taps: ${state.sample.doubleTaps}",
                 style = MaterialTheme.typography.bodyMedium)
@@ -135,6 +198,7 @@ private fun PracticeLiveFeedback(state: PracticeState, settings: NativeSettings,
             }
             if (state.sample.velocity != 0.0) Text("Feed moves while your palm moves. Hold still to stop.",
                 style = MaterialTheme.typography.bodyMedium)
+            }
         }
     }
 }

@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
 import android.provider.Settings
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -27,6 +28,7 @@ import androidx.lifecycle.Lifecycle
 import dev.autoscroll.nativeapp.accessibility.AccessibilityScrollAdapter
 import dev.autoscroll.nativeapp.accessibility.GestureAccessibilityService
 import dev.autoscroll.nativeapp.accessibility.SwipeConfig
+import dev.autoscroll.nativeapp.accessibility.screenContentBounds
 import dev.autoscroll.nativeapp.presentation.HandScrollScreen
 import dev.autoscroll.nativeapp.presentation.PracticeScreen
 import dev.autoscroll.nativeapp.practice.PracticeController
@@ -37,6 +39,7 @@ import dev.autoscroll.nativeapp.scrolling.ScrollActionCoordinator
 import dev.autoscroll.nativeapp.session.GestureCameraService
 import dev.autoscroll.nativeapp.session.GestureSessionState
 import dev.autoscroll.nativeapp.settings.NativeSettings
+import dev.autoscroll.nativeapp.settings.ControlMode
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -73,7 +76,10 @@ class MainActivity : ComponentActivity() {
                 val settings by app.settings.state.collectAsStateWithLifecycle()
                 val diagnostics by app.session.diagnostics.collectAsStateWithLifecycle()
                 val accessibility by GestureAccessibilityService.readiness.collectAsStateWithLifecycle()
+                val pointerContact by GestureAccessibilityService.pointerContact.collectAsStateWithLifecycle()
                 var consent by remember { mutableStateOf(app.settings.accessibilityConsent) }
+                var pointerConsent by remember { mutableStateOf(app.settings.pointerAccessibilityConsent) }
+                val calibrated by app.session.pointerCalibrationReady.collectAsStateWithLifecycle()
                 val cameraRequest = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { permissionRevision++ }
                 val notificationRequest = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { permissionRevision++ }
                 val cameraGranted = remember(permissionRevision) { hasCamera() }
@@ -96,7 +102,16 @@ class MainActivity : ComponentActivity() {
                     val practiceState by practice.state.collectAsStateWithLifecycle()
                     PracticeScreen(practiceState, settings, cameraGranted, cameraBlocked, cameraExplanation, permissionError,
                         onCameraPermission = requestCamera, onStart = { practice.start(settings) },
-                        onStop = { practice.stop() }, onExit = ::leavePractice)
+                        onStop = { practice.stop() }, onExit = ::leavePractice,
+                        onCaptureCorner = practice::capturePointerCorner,
+                        onResetCalibration = practice::resetPointerCalibration,
+                        onUseCalibration = {
+                            practice.calibratedArea?.let { area ->
+                                GestureAccessibilityService.connectedService?.updatePointerInsets(window.decorView.rootWindowInsets)
+                                app.session.preparePointerCalibration(area, externalContentBounds(), screenRotation())
+                                leavePractice()
+                            }
+                        }, onPointerBoardSize = practice::setPointerBoard)
                 } else savedScreens.SaveableStateProvider("main") {
                     HandScrollScreen(
                     state = state,
@@ -131,6 +146,21 @@ class MainActivity : ComponentActivity() {
                     onSettingsChange = ::updateSettings,
                     onTestAction = ::testAction,
                     onPractice = ::openPractice,
+                    pointerConsent = pointerConsent,
+                    pointerCalibrated = calibrated,
+                    onPointerConsent = {
+                        app.settings.accessibilityConsent = true
+                        app.settings.pointerAccessibilityConsent = true
+                        consent = true; pointerConsent = true
+                        openPermissionSettings(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                    },
+                    pointerContactActive = pointerContact.active,
+                    pointerRecoveryRequired = pointerContact.recoveryRequired,
+                    onPointerRecovery = {
+                        app.session.invalidatePointerCalibration()
+                        GestureAccessibilityService.acknowledgePointerRecovery()
+                        permissionError = null
+                    },
                     )
                 }
             }
@@ -138,7 +168,11 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onStart() { super.onStart(); app.session.activityVisible = true }
-    override fun onResume() { super.onResume(); permissionRevision++ }
+    override fun onResume() {
+        super.onResume(); permissionRevision++
+        GestureAccessibilityService.connectedService?.updatePointerInsets(window.decorView.rootWindowInsets)
+        app.session.checkPointerCalibrationBounds(externalContentBounds(), screenRotation())
+    }
     override fun onPause() {
         if (practiceVisible) practice.stop("Practice stopped when you left the screen. Press Start practice when ready.")
         super.onPause()
@@ -151,6 +185,7 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         manualTest?.cancel()
         if (practiceVisible) { practice.close(); app.session.leavePractice() }
+        if (isChangingConfigurations) app.session.invalidatePointerCalibration()
         super.onDestroy()
     }
 
@@ -159,6 +194,7 @@ class MainActivity : ComponentActivity() {
         permissionError = null
         app.session.enterPractice()
         practiceVisible = true
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         if (app.session.serviceRunning) try {
             startService(Intent(this, GestureCameraService::class.java).setAction(GestureCameraService.ACTION_PREPARE_PRACTICE))
         } catch (_: Exception) {
@@ -170,11 +206,28 @@ class MainActivity : ComponentActivity() {
         practice.stop()
         app.session.leavePractice()
         practiceVisible = false
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
 
     private fun hasCamera() = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+    @Suppress("DEPRECATION")
+    private fun screenRotation() = getSystemService(android.view.WindowManager::class.java).defaultDisplay.rotation
+    private fun externalContentBounds() = GestureAccessibilityService.connectedService?.contentBounds()
+        ?: screenContentBounds(this, window.decorView.rootWindowInsets)
     private fun startSession() {
         if (!app.session.activityVisible || app.session.practiceOpen) return
+        if (GestureAccessibilityService.pointerDispatchBusy) {
+            app.session.diagnostics(app.session.diagnostics.value.copy(rejectionReason =
+                if (GestureAccessibilityService.pointerContact.value.recoveryRequired)
+                    "Touch release could not be confirmed. Touch manually, then acknowledge recovery."
+                else "Previous touch is ending. Press Start again after it finishes."))
+            return
+        }
+        GestureAccessibilityService.connectedService?.updatePointerInsets(window.decorView.rootWindowInsets)
+        app.session.checkPointerCalibrationBounds(externalContentBounds(), screenRotation())
+        if (app.settings.state.value.controlMode == ControlMode.POINTER && app.session.pointerCalibration == null) {
+            openPractice(); return
+        }
         manualTest?.cancel()
         try {
             ContextCompat.startForegroundService(this, Intent(this, GestureCameraService::class.java)
@@ -186,10 +239,12 @@ class MainActivity : ComponentActivity() {
         }
     }
     private fun pauseSession() {
+        app.session.invalidatePointerCalibration()
         app.session.machine.pause(); app.session.publish()
         startService(Intent(this, GestureCameraService::class.java).setAction(GestureCameraService.ACTION_PAUSE))
     }
     private fun stopSession() {
+        app.session.invalidatePointerCalibration()
         manualTest?.cancel()
         app.session.machine.stop(); app.session.publish()
         startService(Intent(this, GestureCameraService::class.java).setAction(GestureCameraService.ACTION_STOP))
@@ -206,11 +261,12 @@ class MainActivity : ComponentActivity() {
     }
     private fun updateSettings(settings: NativeSettings) {
         if (settings == app.settings.state.value) return
+        app.session.invalidatePointerCalibration()
         if (settingsChangePauses(app.session.machine.state, app.settings.state.value, settings)) pauseSession()
         app.settings.update(settings)
     }
     private fun testAction(action: ScrollAction) {
-        if (app.session.practiceOpen || manualRunning || !app.settings.accessibilityConsent || !GestureAccessibilityService.readiness.value ||
+        if (app.settings.state.value.controlMode != ControlMode.SCROLL || app.session.practiceOpen || manualRunning || !app.settings.accessibilityConsent || !GestureAccessibilityService.readiness.value ||
             app.session.machine.state != GestureSessionState.Stopped) return
         manualTest?.cancel()
         manualRunning = true

@@ -7,9 +7,10 @@ CameraX ImageAnalysis (front, KEEP_ONLY_LATEST)
   -> one worker: validated YUV sampling / upright rotation
   -> MediaPipe HandLandmarker VIDEO (one hand, existing model)
   -> 21 indexed normalized domain landmarks (mirrored x)
-  -> main-thread GestureCoordinator
-  -> ScrollActionCoordinator (freshness / session / ownership / one operation)
-  -> AccessibilityScrollAdapter
+  -> main-thread SessionRecognition (saved Scroll or Pointer, exclusively)
+  -> Scroll: GestureCoordinator -> ScrollActionCoordinator
+     Pointer: PointerDetector -> pixel mapping / cursor -> PointerContactCoordinator
+  -> AccessibilityScrollAdapter (shared platform ownership)
   -> public AccessibilityService.dispatchGesture
 ```
 
@@ -41,6 +42,13 @@ The fixed camera panel mirrors the image once; landmarks already use the domain'
 selfie coordinates and are fitted into the same letterbox. The saveable Show hand
 tracking switch hides only the drawing. Camera and live feedback stay fixed,
 side by side on wide screens; all other practice content scrolls below them.
+Pointer practice reuses the same camera owner with pure local calibration and
+PointerPracticeFeedback hit tests. After two stable corners, the optional focused
+board hides the preview and fills the viewport with the nine 48dp targets, held
+center target and drag/drop object. Stop remains visible; recognition continues.
+Measured board dimensions provide the same hit rectangles as the rendered targets.
+Use calibration publishes an in-memory, bounds/rotation-tagged one-use handoff and
+stops practice; it never starts the service. Explicit Home Start consumes it.
 
 Entry reserves practice ownership in SessionStore before awaiting work. If the
 service exists, an explicit preparation command acknowledges only after
@@ -78,6 +86,40 @@ Down pose/flick -> forward; up -> backward; inversion applies once and does not 
 Every overlay press/drag suppresses recognition dispatch and resets recognition evidence. Floating controls contain status, Pause, Stop and Open app; resuming requires Home. Camera-free external tests in Settings → Advanced run only when Stopped: one explicit action after the task backgrounds. They are separate from safe local practice. Swipe API completion and observed feed navigation are separate results.
 
 Accessibility consumes only window-state package names, disables window-content retrieval, and does not traverse nodes or read text. Physical touch outside the overlay cannot be monitored without additional intrusive capabilities. A dispatch can interrupt a finger touch; an already submitted short stroke can finish after pause/stop because dispatchGesture has no public cancellation operation.
+
+Pointer uses landmark 8 and the aspect-correct palm-normalized distance between
+landmarks 4 and 8. PointerDetector owns confirmation, hysteresis, freshness,
+reacquisition, frozen pinch origin and relative drag offset with explicit timestamps.
+SessionRecognition instantiates only the selected control detector. Scroll remains
+the saved default; no old gesture golden is replaced. Session-only calibration is
+invalidated by Pause/Stop, Apply, rotation and changed content bounds.
+
+PointerCursorController owns a small non-focusable, non-touchable overlay with
+alpha below Android's obscuring-touch limit. Content insets and integer pixel
+mapping are shared with dispatch. While pressed, the cursor follows the last
+executed contact endpoint, not the pending camera sample. Target identity is the
+current-window package; allowed-app-to-allowed-app changes also terminate/rearm.
+Activity visibility, unsafe targets, lock, stale/lost tracking, widget interaction,
+permission errors and teardown hide the cursor and request contact termination.
+
+PointerContactCoordinator owns one contact across callbacks independently of the
+camera coroutine. Begin uses a stationary continuing stroke; stationary hold
+submits nothing further. Changed integer endpoints use 80ms continueStroke
+segments; an equal-point continuation is skipped because AOSP may reject it as
+having no events. Only one latest pending point exists. Terminal requests clear it,
+wait for the current segment, and send one final 1ms continuation from its exact
+endpoint. Termination bypasses begin/move guards. Listeners may synchronously end
+the session before submission; such cancellation cannot submit a new begin/move.
+
+A platform cancellation releases ownership; a rejected continuation attempts
+terminal release from the last usable stroke. Callback timeouts are fenced so late
+callbacks cannot affect a newer contact. If terminal release fails or cannot be
+confirmed, retained in-process recovery state blocks all new Scroll and Pointer
+actions. Home requires a manual screen touch plus explicit acknowledgement, clears
+calibration and never auto-starts. Binder loss has no public cancel fallback; no
+dummy tap is sent. A guard abort normally sends UP rather than ACTION_CANCEL, so
+an already accepted short contact can still activate its target. This limitation
+and real-device acceptance are documented in [pointer validation](pointer-validation.md).
 
 ## Model and resources
 

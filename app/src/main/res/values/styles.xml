@@ -4,5 +4,5 @@
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:colorAccent">#386A20</item>
     </style>
-    <string name="accessibility_description">Executes vertical swipes, single taps, and double taps requested by your hand gestures or the test buttons. Does not read screen content. You can pause or stop at any time.</string>
+    <string name="accessibility_description">Executes requested scroll gestures or calibrated pointer taps, touch and hold, drag, and release. Pointer uses the cursor location. Does not read screen content. You can pause or stop at any time.</string>
 </resources>
