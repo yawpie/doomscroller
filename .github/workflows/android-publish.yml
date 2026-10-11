@@ -4,14 +4,12 @@ on:
   push:
     branches:
       - main
-      - develop
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
-
-concurrency:
-  group: publish-${{ github.ref }}
-  cancel-in-progress: false
 
 jobs:
   publish:
@@ -39,14 +37,17 @@ jobs:
       - name: Generate version
         id: version
         shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          if [[ "$GITHUB_REF_NAME" == "main" ]]; then
-            CHANNEL="main"
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            CHANNEL="pr.${PR_NUMBER}"
           else
-            CHANNEL="dev"
+            CHANNEL="main"
           fi
 
-          VERSION="v1.0.0-${CHANNEL}.${GITHUB_RUN_NUMBER}"
+          VERSION="v1.0.0-${CHANNEL}.${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Run tests and lint
@@ -59,11 +60,23 @@ jobs:
       - name: Build APK
         run: bash ./gradlew :app:assembleRelease
 
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-${{ steps.version.outputs.version }}
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+
       - name: Publish GitHub Release
+        if: >-
+          github.actor != 'dependabot[bot]' &&
+          (github.event_name == 'push' ||
+          github.event.pull_request.head.repo.full_name == github.repository)
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.version.outputs.version }}
           GH_REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
         shell: bash
         run: |
           args=(
@@ -74,7 +87,7 @@ jobs:
             --title "$RELEASE_TAG"
           )
 
-          if [[ "$GITHUB_REF_NAME" == "develop" ]]; then
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
             args+=(--prerelease)
           fi
 
