@@ -26,18 +26,15 @@ class SettingsStoreTest {
             else preferences.edit().putString("controlMode", savedKey).commit()
         }
     }
-    @Test fun rearmDelayPersistsAndReloadsAsTimedRearm() {
+    @Test fun poseCooldownPersistsAndReloads() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val store = SettingsStore(context)
         val original = store.state.value
         try {
-            assertTrue(original.pose.tapGesturesEnabled)
-            assertEquals(HandPoseRearmMode.TIMED, original.pose.rearmMode)
             for (delay in listOf(200L, 1600L, 3000L)) {
                 store.update(original.copy(pose = original.pose.copy(cooldownMs = delay)))
                 val reloaded = SettingsStore(context).state.value.pose
                 assertEquals(delay, reloaded.cooldownMs)
-                assertEquals(HandPoseRearmMode.TIMED, reloaded.rearmMode)
             }
             assertThrows(IllegalArgumentException::class.java) {
                 store.update(original.copy(pose = original.pose.copy(cooldownMs = 0)))
@@ -60,6 +57,13 @@ class SettingsStoreTest {
                 .withBinding(PoseId.POINTING_RIGHT, PoseAction.SCROLL_RIGHT)
             val store = SettingsStore(context)
             store.update(original.copy(poseActions = actions))
+            assertEquals(actions, SettingsStore(context).state.value.poseActions)
+            store.update(original.copy(poseActions = actions.copy(enabled = false)))
+            val disabled = SettingsStore(context).state.value.poseActions
+            assertFalse(disabled.enabled)
+            assertEquals(actions.bindings, disabled.bindings)
+            assertEquals(actions.profile, disabled.profile)
+            store.update(original.copy(poseActions = disabled.copy(enabled = true)))
             assertEquals(actions, SettingsStore(context).state.value.poseActions)
             preferences.edit().putString("poseActions.binding.INDEX_ONLY.action", "invalid")
                 .putString("poseActions.profile", "invalid").commit()

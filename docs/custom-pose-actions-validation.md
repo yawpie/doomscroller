@@ -68,3 +68,6 @@ Those instrumented cases have not been executed for this change. Visual checks f
 large text, themes, rotation and permission flows, real-hand recognition and actual
 horizontal target-app response remain unverified; earlier emulator evidence above
 does not validate this extension. No connected physical-device permissions were changed.
+
+
+> Historical receipt: subsequent unified recognition replaces the default legacy pose path. See [unified pose validation](unified-pose-recognition-validation.md) for current evidence.

@@ -140,17 +140,24 @@ class PoseActionsPanelTest {
         for (index in 0 until node.childCount) scrollable(node.getChild(index))?.let { return it }
         return null
     }
-    private fun reveal(text: String) {
+    private fun reveal(text: String, click: Boolean = false) {
+        fun match(): Boolean {
+            var node = find(text) ?: return false
+            if (!node.isVisibleToUser) return false
+            if (!click) return true
+            while (!node.isClickable) node = node.parent ?: return false
+            return node.refresh() && node.isVisibleToUser && node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+        }
         waitUntil(text) { root() != null }
-        if (find(text)?.isVisibleToUser == true) return
+        if (match()) return
         for (step in 0 until 32) {
-            if (find(text)?.isVisibleToUser == true) return
+            if (match()) return
             val moved = scrollable(root())?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD) == true
             automation.waitForIdle(50, 1000)
             if (!moved) break
         }
         waitUntil(text) {
-            if (find(text)?.isVisibleToUser == true) true
+            if (match()) true
             else {
                 scrollable(root())?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
                 automation.waitForIdle(50, 1000)
@@ -159,12 +166,7 @@ class PoseActionsPanelTest {
         }
     }
     private fun click(text: String) {
-        reveal(text)
-        waitUntil(text) {
-            var node = find(text)
-            while (node != null && !node.isClickable) node = node.parent
-            node?.let { it.refresh() && it.performAction(AccessibilityNodeInfo.ACTION_CLICK) } == true
-        }
+        reveal(text, click = true)
         instrumentation.waitForIdleSync()
     }
     private fun waitUntil(label: String, condition: () -> Boolean) {

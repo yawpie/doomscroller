@@ -98,7 +98,7 @@ class CustomPoseTest {
 
     @Test fun discreteLatchSurvivesUnknownAndRequiresTimedValidRelease() {
         val actions = PoseActions(enabled = true, profile = combinations).withBinding(PoseId.INDEX_ONLY, PoseAction.BACK)
-        val detector = CustomPoseDetector(actions, config)
+        val detector = HandPoseDetector(config, actions)
         fun sample(t: Long, p: PoseId?) = detector.processPose(t, p)
         assertNull(sample(0, PoseId.INDEX_ONLY).event)
         assertNull(sample(100, PoseId.INDEX_ONLY).event)
@@ -119,7 +119,7 @@ class CustomPoseTest {
         val actions = PoseActions(enabled = true, profile = combinations)
             .withBinding(PoseId.INDEX_ONLY, PoseAction.CONTINUOUS_NEXT)
             .withBinding(PoseId.INDEX_MIDDLE, PoseAction.CONTINUOUS_NEXT)
-        val detector = CustomPoseDetector(actions, config)
+        val detector = HandPoseDetector(config, actions)
         fun sample(t: Long, p: PoseId?) = detector.processPose(t, p)
         sample(0, PoseId.INDEX_ONLY); sample(100, PoseId.INDEX_ONLY)
         assertEquals(PoseId.INDEX_ONLY, sample(200, PoseId.INDEX_ONLY).held)
@@ -137,8 +137,8 @@ class CustomPoseTest {
     }
 
     @Test fun timestampAndGapDiscardEvidenceAndNoneNeverOwns() {
-        val detector = CustomPoseDetector(PoseActions(enabled = true, profile = combinations)
-            .withBinding(PoseId.INDEX_ONLY, PoseAction.BACK), config)
+        val detector = HandPoseDetector(config, PoseActions(enabled = true, profile = combinations)
+            .withBinding(PoseId.INDEX_ONLY, PoseAction.BACK))
         fun sample(t: Long, p: PoseId?) = detector.processPose(t, p)
         sample(0, PoseId.INDEX_ONLY); sample(100, PoseId.INDEX_ONLY)
         assertNull(sample(100, PoseId.INDEX_ONLY).event)
@@ -151,7 +151,7 @@ class CustomPoseTest {
     }
 
     @Test fun gapDoesNotReuseExitOnlyGeometry() {
-        val detector = CustomPoseDetector(PoseActions(enabled = true), config)
+        val detector = HandPoseDetector(config, PoseActions(enabled = true))
         assertEquals(PoseId.POINTING_UP,
             detector.process(HandTrackingResult(0, HandPose(points(setOf(5))))).pose)
         assertNull(detector.process(HandTrackingResult(400, HandPose(points(setOf(5), rotation = 0.65)))).pose)
@@ -164,8 +164,8 @@ class CustomPoseTest {
         val combined = HandPose(points(setOf(5, 9)))
         for (t in 0L..500L step 100) {
             val result = coordinator.process(HandTrackingResult(t, combined))
-            assertEquals(PoseId.INDEX_MIDDLE, result.customPose?.pose)
-            assertNull(result.customPose?.event)
+            assertEquals(PoseId.INDEX_MIDDLE, result.poseResult?.pose)
+            assertNull(result.poseResult?.event)
             assertFalse(result.suppressesContinuous)
         }
         val index = HandPose(points(setOf(5)))
@@ -173,8 +173,8 @@ class CustomPoseTest {
     }
 
     @Test fun targetChangeCannotRearmAConsumedDiscretePose() {
-        val detector = CustomPoseDetector(PoseActions(enabled = true, profile = combinations)
-            .withBinding(PoseId.INDEX_ONLY, PoseAction.BACK), config)
+        val detector = HandPoseDetector(config, PoseActions(enabled = true, profile = combinations)
+            .withBinding(PoseId.INDEX_ONLY, PoseAction.BACK))
         for (t in 0L..200L step 100) detector.processPose(t, PoseId.INDEX_ONLY)
         detector.targetChanged()
         for (t in 300L..1000L step 100) assertNull(detector.processPose(t, PoseId.INDEX_ONLY).event)
@@ -185,8 +185,8 @@ class CustomPoseTest {
     }
 
     @Test fun targetFenceSurvivesLossAndRepeatedTargetChanges() {
-        val detector = CustomPoseDetector(PoseActions(enabled = true, profile = combinations)
-            .withBinding(PoseId.INDEX_ONLY, PoseAction.CONTINUOUS_NEXT), config)
+        val detector = HandPoseDetector(config, PoseActions(enabled = true, profile = combinations)
+            .withBinding(PoseId.INDEX_ONLY, PoseAction.CONTINUOUS_NEXT))
         for (t in 0L..200L step 100) detector.processPose(t, PoseId.INDEX_ONLY)
         detector.processPose(300, null)
         detector.targetChanged()
@@ -209,7 +209,34 @@ class CustomPoseTest {
         coordinator.process(shifted(100, 0.08))
         assertTrue(coordinator.flickDetector.ownsGesture)
         val decision = coordinator.process(shifted(200, 0.16, points(setOf(5))))
-        assertNull(decision.customPose?.pose)
-        assertNull(decision.customPose?.event)
+        assertNull(decision.poseResult?.pose)
+        assertNull(decision.poseResult?.event)
     }
+    @Test fun reconfigurationPreservesDiscreteFenceUntilValidRelease() {
+        val coordinator = GestureCoordinator(mode = GestureMode.POSE)
+        fun process(t: Long, open: Set<Int>) = coordinator.process(HandTrackingResult(t, HandPose(points(open))))
+        for (t in 0L..200L step 100) process(t, setOf(5))
+        coordinator.configure(config.copy(cooldownMs = 600), GestureMode.HYBRID)
+        for (t in 300L..900L step 100) assertNull(process(t, setOf(5)).poseResult?.event)
+        for (t in 1000L..1200L step 100) process(t, emptySet())
+        process(1300, setOf(5)); process(1400, setOf(5))
+        assertEquals(PoseId.POINTING_UP, process(1500, setOf(5)).poseResult?.event)
+    }
+
+    @Test fun landmarkDepthDoesNotAlterPlanarClassification() {
+        val p = points(setOf(5)).map { it.copy(z = -10.0) }
+        assertEquals(PoseId.POINTING_UP, HandPoseClassifier(config).classify(p, 1.0, direction))
+    }
+
+    @Test fun disabledSavedBindingsUseDefaultProfileEvenWithDirectDetectorConstruction() {
+        val saved = PoseActions(enabled = false, profile = combinations)
+            .withBinding(PoseId.INDEX_ONLY, PoseAction.BACK)
+        val detector = HandPoseDetector(config, saved)
+        var result: PoseResult? = null
+        for (t in 0L..200L step 100) result = detector.process(HandTrackingResult(t, HandPose(points(setOf(5)))))
+        assertEquals(PoseId.POINTING_UP, result!!.pose)
+        assertEquals(PoseId.POINTING_UP, result.event)
+        assertEquals(PoseAction.BACK, saved.actionFor(PoseId.INDEX_ONLY))
+    }
+
 }

@@ -65,14 +65,11 @@ data class ScrollConfig(
     }
 }
 
-enum class HandPoseRearmMode { OPEN_HAND, STABLE_POSE, TIMED }
 data class HandPoseDetectionConfig(
     val enabled: Boolean = true,
     val confirmationDurationMs: Long = 180,
     val releaseDurationMs: Long = 180,
     val cooldownMs: Long = 450,
-    val rearmMode: HandPoseRearmMode = HandPoseRearmMode.OPEN_HAND,
-    val stablePoseDurationMs: Long = 1000,
     val minimumObservations: Int = 3,
     val minimumIndexAngle: Double = 160.0,
     val maximumCurledAngle: Double = 110.0,
@@ -83,6 +80,4 @@ data class HandPoseDetectionConfig(
     val minimumFingerLengthRatio: Double = 0.35,
     val minimumBoneLengthRatio: Double = 0.03,
     val maximumSampleGapMs: Long = 250,
-    // Native app enables taps; false preserves the original Dart replay contract.
-    val tapGesturesEnabled: Boolean = false,
 )

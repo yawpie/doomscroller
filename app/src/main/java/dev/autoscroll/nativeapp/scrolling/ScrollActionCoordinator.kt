@@ -30,8 +30,8 @@ class ScrollActionCoordinator(
     private var lastDiscreteTimestamp = Long.MIN_VALUE
     private var previousMotionTimestamp: Long? = null
     private var velocity = 0.0
-    private var settings: NativeSettings? = null
-    private var lastCustomTimestamp: Long? = null
+    private var bindings = PoseActions().effective()
+    private var lastPoseTimestamp: Long? = null
     private var poseHolding = false
     private var holdGeneration = 0L
 
@@ -43,13 +43,14 @@ class ScrollActionCoordinator(
         mutableState.value = state.value.copy(sessionActive = active, rejectionReason = null)
     }
 
+    /** When supplied, the settings snapshot takes precedence over config and inverted. */
     fun configure(config: ScrollConfig = this.config, inverted: Boolean = this.inverted, settings: NativeSettings? = null) {
         resetPending()
-        this.config = config
-        this.inverted = inverted
-        this.settings = settings
-        lastCustomTimestamp = null
-        mapper = ScrollVelocityMapper(config).also { it.configure(inverted = inverted) }
+        this.config = settings?.scroll ?: config
+        this.inverted = settings?.inverted ?: inverted
+        bindings = (settings?.poseActions ?: PoseActions()).effective(this.inverted)
+        lastPoseTimestamp = null
+        mapper = ScrollVelocityMapper(this.config).also { it.configure(inverted = this.inverted) }
         sessionStartedAt = if (state.value.sessionActive) clockMs() else Long.MAX_VALUE
         lastDiscreteTimestamp = Long.MIN_VALUE
     }
@@ -57,15 +58,15 @@ class ScrollActionCoordinator(
     /** nowMs is the monotonic timestamp of the inference sample, not its callback delivery time. */
     fun process(decision: GestureDecision, nowMs: Long = clockMs(), expectedTargetPackage: String? = null,
         expectedTargetGeneration: Long? = null) {
-        val custom = decision.customPose
-        if (custom != null && settings != null) {
-            val previous = lastCustomTimestamp
-            if (!fresh(nowMs) || custom.timestampMs != nowMs || previous != null && nowMs <= previous) {
+        val pose = decision.poseResult
+        if (pose != null) {
+            val previous = lastPoseTimestamp
+            if (!fresh(nowMs) || pose.timestampMs != nowMs || previous != null && nowMs <= previous) {
                 stopContinuous()
                 return reject("Stale or out-of-order pose sample")
             }
-            lastCustomTimestamp = nowMs
-            val mapped = custom.event?.let { PoseActionResolver.custom(it, settings!!) }
+            lastPoseTimestamp = nowMs
+            val mapped = pose.event?.let { bindings.actionFor(it) }
             if (mapped != null && mapped != PoseAction.NONE) {
                 stopContinuous()
                 val action = screenAction(mapped) ?: return
@@ -73,7 +74,7 @@ class ScrollActionCoordinator(
                 return dispatch(ScrollRequest(action, expectedTargetPackage = expectedTargetPackage,
                     expectedTargetGeneration = expectedTargetGeneration), nowMs)
             }
-            val held = custom.held?.let { PoseActionResolver.custom(it, settings!!) }
+            val held = pose.held?.let { bindings.actionFor(it) }
             val heldVelocity = held?.let(PoseActionResolver::holdVelocity) ?: 0.0
             if (heldVelocity != 0.0) {
                 poseHolding = true
@@ -85,23 +86,16 @@ class ScrollActionCoordinator(
             }
             if (poseHolding) stopContinuous()
         }
-        val pose = decision.pose
         val flick = decision.flick
-        if (pose != null || flick != null) {
+        if (flick != null) {
             stopContinuous()
-            val resolved = if (pose != null) PoseActionResolver.legacy(pose.pose, inverted)
-                else PoseActionResolver.flick(flick!!.direction, inverted)
-            val action = screenAction(resolved) ?: return reject("Pose has no screen action")
-            val timestamp = pose?.timestampMs ?: flick!!.timestampMs
+            val action = screenAction(PoseActionResolver.flick(flick.direction, inverted)) ?: return
+            val timestamp = flick.timestampMs
             if (timestamp > clockMs()) return reject("Gesture timestamp is in the future")
             if (timestamp <= lastDiscreteTimestamp) return reject("Duplicate or out-of-order gesture")
             lastDiscreteTimestamp = timestamp
-            val distance = if (pose == null && config.flickAction == FlickScrollAction.FAST_SCROLL)
-                config.flickScrollDistance else null
-            val request = if (action.isTap) ScrollRequest(action, expectedTargetPackage = expectedTargetPackage,
-                expectedTargetGeneration = expectedTargetGeneration)
-                else ScrollRequest(action, distance, config.flickDurationMs, expectedTargetPackage, expectedTargetGeneration)
-            dispatch(request, timestamp)
+            val distance = if (config.flickAction == FlickScrollAction.FAST_SCROLL) config.flickScrollDistance else null
+            dispatch(ScrollRequest(action, distance, config.flickDurationMs, expectedTargetPackage, expectedTargetGeneration), timestamp)
             return
         }
         if (decision.suppressesContinuous) return stopContinuous()
@@ -141,7 +135,7 @@ class ScrollActionCoordinator(
         else -> null
     }
 
-    fun invalidate() { resetPending(); lastCustomTimestamp = null; sessionStartedAt = clockMs() + 1 }
+    fun invalidate() { resetPending(); lastPoseTimestamp = null; sessionStartedAt = clockMs() + 1 }
 
     private fun fresh(timestamp: Long): Boolean {
         val current = clockMs()

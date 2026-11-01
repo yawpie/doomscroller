@@ -10,25 +10,25 @@ Then Start from Home, wait for Tracking, switch to the feed. Tap/drag the floati
 
 Before external trials, use Gestures → Practice safely with camera access only.
 Confirm no accessibility/overlay requirement, explicit Start practice, live hand/no
-hand feedback, local navigation/playback/double taps and repeats in each saved mode
+hand feedback, local navigation/playback/double taps and once-per-appearance behavior in each saved mode
 and inversion. Verify entry pauses normal tracking and cancels pending tests;
 Stop/Back/background/lock/rotation release capture, discard late callbacks and
 never restart automatically. Normal tracking needs explicit Home Start/Resume.
 Local feedback proves neither physical recognition accuracy nor another feed's
 response; record those as separate trials.
 
-## Legacy trial matrix (custom pose actions off)
+## Default preset trial matrix (custom pose actions off)
 
 | Group | Trials / expected evidence |
 | --- | --- |
-| Point up |20 deliberate confirmations; backward actions repeat only after the configured delay and fresh confirmation while held 5 seconds |
-| Point down |20 deliberate confirmations; forward actions repeat only after the configured delay and fresh confirmation |
-| Rearm |20 repetitions using time only, including held poses, direct up/down changes and no hand during the delay; open/closed hands cannot shorten the interval; reacquisition needs fresh confirmation |
-| Rearm settings |Move the 200–3000ms slider, compare action intervals including confirmation time, relaunch and verify the saved duration |
+| Point up |20 deliberate confirmations; one backward action while held 5 seconds; valid release and cooldown before repeating |
+| Point down |20 deliberate confirmations; one forward action per appearance, with valid release and cooldown before repeating |
+| Rearm |20 repetitions with a sustained different valid pose, including tracking loss and direct up/down changes; loss alone must not rearm |
+| Rearm settings |Move the 200–3000ms slider, compare action intervals after valid release, relaunch and verify the saved duration |
 | Open hand |20 confirmations per hand in HYBRID/POSE; one center single tap; no repeat while held 5 seconds; independently observe pause/play toggle in supporting feeds |
-| Thumbs-up |20 confirmations per hand; center double taps repeat only after the delay and fresh confirmation; test wrist rotation, curled thumb, partial visibility and non-curled fingers |
+| Thumbs-up |20 confirmations per hand; one center double tap per appearance after confirmation; test wrist rotation, curled thumb, partial visibility and non-curled fingers |
 | Flick |20 per direction; cooldown+settlement before another flick |
-| Unknown/jitter |20 malformed/partial/noisy pose trials with no unintended discrete action; open hand is now an intentional single-tap pose |
+| Unknown/jitter |20 malformed/partial/noisy pose trials with no unintended discrete action; all five fingers must be extended for open hand |
 | Continuous |stationary calibration, slow up/down, reversal, idle, loss and reacquisition; measure touch threshold in each target app |
 | Camera |normal/low/bright light, near/far hand, partial visibility, fast and slow motion |
 | Overlay |drag near edges/center, expand/collapse, long press, Stop during swipe; injected path must not touch overlay |

@@ -43,9 +43,10 @@ Camera denial explains retry or App info access. Floating controls and notificat
 are optional in Scroll; Skip floating controls saves the existing overlay preference as off.
 Start on Home and wait for Tracking before switching to a feed.
 
-With custom pose actions off (the default), HYBRID/POSE retain the legacy
-pointing, open-hand tap and thumbs-up behavior, including their existing rearm
-rules. CONTINUOUS/FLICK retain movement controls. To configure poses, enable
+With custom pose actions off (the default), HYBRID/POSE use the default
+pointing, open-hand tap and thumbs-up bindings on the same pose detector as
+custom actions. Each discrete action runs once per appearance; a different valid
+pose must be observed for release, and the cooldown also applies. CONTINUOUS/FLICK retain movement controls. To configure poses, enable
 Settings → Hand pose actions, choose Pointing directions or Finger combinations,
 then choose an action for each pose. Direction and finger profiles are exclusive;
 open hand, closed hand and thumbs-up are shared. The three finger combinations
@@ -62,7 +63,7 @@ swipes the finger left. Distance uses the saved screen-distance fraction of the
 content width, and duration uses the saved swipe duration. Practice shows a separate
 five-page horizontal sample; external apps decide whether the swipe scrolls or
 performs another action.
-Reverse direction affects legacy pointing and movement/flick, not selected custom
+Reverse direction affects preset pointing and movement/flick, not selected custom
 pose directions. Gestures describes saved settings; apply or discard an unsaved
 draft before entering Practice. Reset pose actions changes only that draft group.
 
@@ -128,7 +129,8 @@ status, Pause, Stop and Open app; resume always needs an explicit press in Home.
 - [Permissions](docs/permissions.md)
 - [Physical-device trials](docs/device-validation.md)
 - [Pointer implementation and validation receipt](docs/pointer-validation.md)
-- [Custom pose actions validation receipt](docs/custom-pose-actions-validation.md)
+- [Unified pose recognition validation](docs/unified-pose-recognition-validation.md)
+- [Historical custom pose actions validation receipt](docs/custom-pose-actions-validation.md)
 - [Prior independent QA review](docs/qa-review.md)
 
 No recording, frame upload, backend, analytics, runtime model download or network

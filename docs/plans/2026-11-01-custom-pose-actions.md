@@ -302,3 +302,6 @@ Jika bentuk jari tertentu tidak mencapai target, jangan menyembunyikan kegagalan
 Aktivasi arah dan kombinasi jari secara bersamaan untuk bentuk yang identik; hitungan umum 1-5 jari; kombinasi jari lain; dua tangan; pose buatan pengguna melalui training; profil per aplikasi; macro/rangkaian aksi; gesture Resume; swipe horizontal; kontrol PC; penyimpanan frame; model baru; tuning slider per pose.
 
 Profil eksklusif, tiga kombinasi telunjuk/tengah dengan aksi independen dan katalog scroll/tap/Back/continuous mengikuti keputusan pengguna. Bentuk canonical, default custom sekali-per-penampilan dan ambang penerimaan merupakan usulan desain yang konkret. Jika kelak diperlukan profil arah dan kombinasi aktif bersamaan, definisikan input pembeda yang terukur terlebih dahulu, misalnya pose tambahan atau mode eksplisit, bukan menambahkan prioritas tersembunyi pada Settings.
+
+
+> Subsequent design: [unified pose recognition plan](2026-11-01-unified-pose-recognition.md) supersedes the earlier custom-off legacy-path assumptions.

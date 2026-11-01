@@ -96,13 +96,14 @@ replacement taps. Keep one active segment and one replaceable pending point.
 Review [pointer validation](pointer-validation.md) for executed test evidence and
 the physical camera, real-app and performance acceptance still outstanding.
 
-## Custom pose review
+## Unified pose review
 
 Keep profile ownership, immutable bindings and trigger policy in `:gesture`, and
-use `PoseActionResolver` for Practice and the external Scroll coordinator. Exercise
-custom-off parity, three independent finger bindings, common poses, preference
+use the same effective binding snapshot for Practice and the external Scroll coordinator. Exercise
+the default preset, three independent finger bindings, common poses, preference
 corruption/future versions, final direction and HYBRID NONE. Back and held segments
 share target generation, freshness and dispatch guards. Do not infer a successful
 navigation from Back ACCEPTED or a swipe callback. Preserve failures and distinguish
 unit tests, compiled APKs, emulator execution and physical acceptance in the
-[custom pose receipt](custom-pose-actions-validation.md).
+[unified pose validation](unified-pose-recognition-validation.md). The earlier
+[custom pose receipt](custom-pose-actions-validation.md) is historical.

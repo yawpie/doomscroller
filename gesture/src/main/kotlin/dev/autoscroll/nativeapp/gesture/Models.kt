@@ -59,10 +59,8 @@ data class FlickEvent(
     val durationMs: Long,
 )
 
-enum class RecognizedHandPose { POINTING_UP, POINTING_DOWN, NEUTRAL, THUMBS_UP, CLOSED_HAND, UNKNOWN }
-enum class HandPosePhase { READY, CONFIRMING, LATCHED, WAITING_REARM }
-data class PoseEvent(val pose: RecognizedHandPose, val timestampMs: Long)
-data class CustomPoseResult(
+enum class HandPosePhase { READY, CONFIRMING, LATCHED }
+data class PoseResult(
     val pose: PoseId? = null,
     val phase: HandPosePhase = HandPosePhase.READY,
     val confirmationProgress: Double = 0.0,
@@ -74,7 +72,6 @@ enum class GestureMode { CONTINUOUS, FLICK, POSE, HYBRID }
 data class GestureDecision(
     val motion: HandMotion,
     val flick: FlickEvent? = null,
-    val pose: PoseEvent? = null,
     val suppressesContinuous: Boolean = false,
-    val customPose: CustomPoseResult? = null,
+    val poseResult: PoseResult? = null,
 )

@@ -31,6 +31,13 @@ class PoseActions(
 ) {
     val bindings: Map<PoseId, PoseAction> = Collections.unmodifiableMap(PoseId.entries.associateWith { bindings[it] ?: defaultBindings().getValue(it) })
     fun actionFor(pose: PoseId): PoseAction = if (pose.profile == null || pose.profile == profile) bindings.getValue(pose) else PoseAction.NONE
+    fun effective(inverted: Boolean = false): PoseActions {
+        if (enabled) return this
+        val defaults = PoseActions(enabled = true)
+        return if (!inverted) defaults else defaults
+            .withBinding(PoseId.POINTING_UP, PoseAction.NEXT_ITEM)
+            .withBinding(PoseId.POINTING_DOWN, PoseAction.PREVIOUS_ITEM)
+    }
     fun copy(enabled: Boolean = this.enabled, profile: PoseRecognitionProfile = this.profile, bindings: Map<PoseId, PoseAction> = this.bindings) = PoseActions(enabled, profile, bindings)
     fun withBinding(pose: PoseId, action: PoseAction) = copy(bindings = bindings + (pose to action))
     override fun equals(other: Any?) = other is PoseActions && enabled == other.enabled && profile == other.profile && bindings == other.bindings

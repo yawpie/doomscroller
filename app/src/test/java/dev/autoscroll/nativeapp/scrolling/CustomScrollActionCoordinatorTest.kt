@@ -26,7 +26,7 @@ class CustomScrollActionCoordinatorTest {
 
     private fun decision(time: Long, event: Boolean = false, held: Boolean = false) = GestureDecision(
         HandMotion(HandAction.IDLE), suppressesContinuous = true,
-        customPose = CustomPoseResult(pose = PoseId.POINTING_UP, event = if (event) PoseId.POINTING_UP else null,
+        poseResult = PoseResult(pose = PoseId.POINTING_UP, event = if (event) PoseId.POINTING_UP else null,
             held = if (held) PoseId.POINTING_UP else null, timestampMs = time))
 
     @Test fun mappedBackAcceptedAndBusyIsConsumedWithoutRetry() = runTest {
@@ -121,7 +121,7 @@ class CustomScrollActionCoordinatorTest {
         coordinator.process(decision(now, held = true), now, "target.app", 1)
         now += 100
         coordinator.process(GestureDecision(HandMotion(HandAction.STOP), suppressesContinuous = true,
-            customPose = CustomPoseResult(timestampMs = now)), now, "target.app", 1)
+            poseResult = PoseResult(timestampMs = now)), now, "target.app", 1)
         runCurrent()
         assertTrue(executor.requests.isEmpty())
         assertFalse(coordinator.state.value.busy)
@@ -136,7 +136,7 @@ class CustomScrollActionCoordinatorTest {
         coordinator.process(decision(now, held = true), now, "target.app", 1)
         now += 100
         val noHand = GestureDecision(HandMotion(HandAction.STOP), suppressesContinuous = true,
-            customPose = CustomPoseResult(timestampMs = now))
+            poseResult = PoseResult(timestampMs = now))
         coordinator.process(noHand, now, "target.app", 1)
         now += 100
         coordinator.process(decision(now, held = true), now, "target.app", 1)
@@ -148,4 +148,32 @@ class CustomScrollActionCoordinatorTest {
         runCurrent()
         assertEquals(1, executor.requests.size)
     }
+    @Test fun settingsSnapshotDirectionIsAuthoritativeForDefaultPreset() = runTest {
+        for (explicitInverted in listOf(false, true)) {
+            val executor = Executor()
+            val now = 1000L
+            val coordinator = ScrollActionCoordinator(executor, this, { now })
+            val settings = NativeSettings(mode = GestureMode.POSE, inverted = true)
+            if (explicitInverted) coordinator.configure(inverted = false, settings = settings)
+            else coordinator.configure(settings = settings)
+            coordinator.setSessionActive(true)
+            coordinator.process(decision(now, event = true), now); runCurrent()
+            assertEquals(ScrollAction.FORWARD, executor.requests.single().action)
+        }
+    }
+
+    @Test fun settingsSnapshotAlsoOverridesConflictingScrollConfig() = runTest {
+        val executor = Executor()
+        val now = 1000L
+        val coordinator = ScrollActionCoordinator(executor, this, { now })
+        val settings = NativeSettings(mode = GestureMode.FLICK, inverted = true,
+            scroll = ScrollConfig(flickAction = FlickScrollAction.FAST_SCROLL, flickScrollDistance = 700.0))
+        coordinator.configure(config = ScrollConfig(flickAction = FlickScrollAction.PAGE), inverted = false, settings = settings)
+        coordinator.setSessionActive(true)
+        val flick = FlickEvent(FlickDirection.DOWN, now, 0.2, 1.0, 200)
+        coordinator.process(GestureDecision(HandMotion(HandAction.IDLE), flick = flick), now); runCurrent()
+        assertEquals(ScrollAction.BACKWARD, executor.requests.single().action)
+        assertEquals(700.0, executor.requests.single().distancePixels!!, 0.0)
+    }
+
 }

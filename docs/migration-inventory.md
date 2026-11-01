@@ -1,5 +1,7 @@
 # Migration inventory
 
+> Historical migration details below describe earlier revisions. Current pose behavior and fixture coverage are documented in [unified pose validation](unified-pose-recognition-validation.md) and the [fixture guide](../parity-fixtures/README.md).
+
 The only maintained application is the native Android project at the repository root. Legacy source can be reviewed
 in Git revision `078544f`; it is no longer part of the working tree or build.
 

@@ -39,7 +39,7 @@ private fun actionDescription(action: PoseAction) = when (action) {
     PoseAction.CONTINUOUS_NEXT, PoseAction.CONTINUOUS_PREVIOUS -> "Scroll while the confirmed pose remains visible."
 }
 internal fun poseActionsInactiveReason(settings: NativeSettings): String? = when {
-    !settings.poseActions.enabled -> "Custom pose actions are off."
+    !settings.poseActions.enabled -> "Custom pose actions are off. In Scroll mode, Pose and Hybrid use the default preset. Saved custom actions are retained."
     settings.controlMode == ControlMode.POINTER -> "Custom pose actions are inactive in Pointer mode."
     settings.mode == GestureMode.FLICK || settings.mode == GestureMode.CONTINUOUS -> "Custom pose actions are inactive in ${modeLabel(settings.mode)} mode."
     else -> null
@@ -56,13 +56,13 @@ internal fun PoseActionsPanel(value: NativeSettings, update: (NativeSettings) ->
         Text("Use custom pose actions", modifier = Modifier.weight(1f)); Switch(actions.enabled, onCheckedChange = null)
     }
     poseActionsInactiveReason(value)?.let { Text(it) }
-    if (actions.enabled) {
-        Text("Choose one recognition profile. Both groups remain editable; common poses are shared.")
+    run {
+        Text(if (actions.enabled) "Choose one recognition profile. Both groups remain editable; common poses are shared." else "Saved custom profile and actions are inactive until enabled.")
         PoseRecognitionProfile.entries.forEach { profile ->
-            Row(Modifier.fillMaxWidth().selectable(actions.profile == profile, role = Role.RadioButton,
+            Row(Modifier.fillMaxWidth().selectable(actions.profile == profile, enabled = actions.enabled, role = Role.RadioButton,
                 onClick = { update(value.copy(poseActions = actions.copy(profile = profile))) }).heightIn(min = 48.dp),
                 verticalAlignment = Alignment.CenterVertically) {
-                RadioButton(actions.profile == profile, onClick = null)
+                RadioButton(actions.profile == profile, onClick = null, enabled = actions.enabled)
                 Text(if (profile == PoseRecognitionProfile.DIRECTION) "Pointing directions" else "Finger combinations")
             }
         }
@@ -70,7 +70,7 @@ internal fun PoseActionsPanel(value: NativeSettings, update: (NativeSettings) ->
             val title = when (profile) { PoseRecognitionProfile.DIRECTION -> "Pointing directions"; PoseRecognitionProfile.FINGER_COMBINATIONS -> "Finger combinations"; null -> "Common poses" }
             Text(title + if (profile != null && profile != actions.profile) " · inactive profile" else "", style = MaterialTheme.typography.titleSmall)
             PoseId.entries.filter { it.profile == profile }.forEach { pose ->
-                OutlinedButton(onClick = { selected = pose }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                OutlinedButton(onClick = { selected = pose }, enabled = actions.enabled, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                     OutlinedCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
                 PoseIllustration(pose)

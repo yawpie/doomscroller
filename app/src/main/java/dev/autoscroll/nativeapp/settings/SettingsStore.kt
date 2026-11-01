@@ -41,8 +41,6 @@ class SettingsStore(context: Context) {
                 rearmDurationMs = number("flickRearm", 150.0).toLong(),
             ),
             pose = HandPoseDetectionConfig(
-                tapGesturesEnabled = true,
-                rearmMode = HandPoseRearmMode.TIMED,
                 confirmationDurationMs = number("poseConfirm", 180.0).toLong(),
                 cooldownMs = number("poseCooldown", 450.0).toLong(),
                 minimumIndexAngle = number("indexAngle", 160.0),

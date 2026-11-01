@@ -11,7 +11,7 @@ class PoseActionResolverTest {
         for (pose in PoseId.entries) for (action in PoseAction.entries) {
             val changed = empty.copy(profile = pose.profile ?: PoseRecognitionProfile.DIRECTION).withBinding(pose, action)
             val settings = NativeSettings(mode = GestureMode.POSE, poseActions = changed)
-            assertEquals(action, PoseActionResolver.custom(pose, settings))
+            assertEquals(action, settings.poseActions.effective(settings.inverted).actionFor(pose))
             assertTrue(changed.bindings.filterKeys { it != pose }.values.all { it == PoseAction.NONE })
         }
         assertTrue(empty.bindings.values.all { it == PoseAction.NONE })
@@ -39,17 +39,13 @@ class PoseActionResolverTest {
         assertEquals(PoseTrigger.INACTIVE, PoseAction.NONE.trigger)
     }
 
-    @Test fun customDirectionsStayFinalWhileLegacyMovementAndFlickInvertOnce() {
-        val settings = NativeSettings(mode = GestureMode.POSE, inverted = true,
-            poseActions = PoseActions(enabled = true))
-        assertEquals(PoseAction.PREVIOUS_ITEM, PoseActionResolver.custom(PoseId.POINTING_UP, settings))
-        assertEquals(PoseAction.NEXT_ITEM, PoseActionResolver.legacy(RecognizedHandPose.POINTING_UP, true))
+    @Test fun defaultDirectionsInvertAndCustomDirectionsStayFinal() {
+        val custom = PoseActions(enabled = true)
+        assertEquals(PoseAction.PREVIOUS_ITEM, custom.effective(true).actionFor(PoseId.POINTING_UP))
+        assertEquals(PoseAction.NEXT_ITEM, PoseActions().effective(true).actionFor(PoseId.POINTING_UP))
         assertEquals(PoseAction.PREVIOUS_ITEM, PoseActionResolver.flick(FlickDirection.DOWN, true))
         assertEquals(-1.0, PoseActionResolver.movement(1.0, true), 0.0)
-        assertEquals(PoseAction.SINGLE_TAP, PoseActionResolver.legacy(RecognizedHandPose.NEUTRAL, true))
-        assertEquals(PoseAction.NONE, PoseActionResolver.custom(PoseId.POINTING_UP, settings.copy(mode = GestureMode.FLICK)))
-        assertEquals(PoseAction.NONE, PoseActionResolver.custom(PoseId.POINTING_UP, settings.copy(controlMode = ControlMode.POINTER)))
-        assertEquals(PoseAction.NONE, PoseActionResolver.custom(PoseId.POINTING_UP, settings.copy(poseActions = PoseActions())))
-        assertEquals(settings.copy(poseActions = PoseActions()), settings.reset(SettingsGroup.POSE_ACTIONS))
+        assertEquals(PoseAction.SINGLE_TAP, PoseActions().effective(true).actionFor(PoseId.OPEN_HAND))
+        assertEquals(PoseActions(), NativeSettings().reset(SettingsGroup.POSE_ACTIONS).poseActions)
     }
 }

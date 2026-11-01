@@ -23,25 +23,23 @@ class ScrollActionCoordinatorTest {
         }
     }
 
-    private fun pose(direction: RecognizedHandPose, timestamp: Long) = GestureDecision(
-        motion = HandMotion(HandAction.IDLE), pose = PoseEvent(direction, timestamp), suppressesContinuous = true)
+    private fun pose(direction: PoseId, timestamp: Long) = GestureDecision(
+        motion = HandMotion(HandAction.IDLE), poseResult = PoseResult(pose = direction, event = direction, timestampMs = timestamp), suppressesContinuous = true)
 
     private fun flick(direction: FlickDirection, timestamp: Long) = GestureDecision(
         motion = HandMotion(HandAction.IDLE), flick = FlickEvent(direction, timestamp, 0.2, 1.0, 200), suppressesContinuous = true)
 
     @Test fun openHandAndThumbMapToTapsWithoutSwipeSettingsOrDirectionInversion() = runTest {
-        assertTrue(dev.autoscroll.nativeapp.settings.NativeSettings().pose.tapGesturesEnabled)
-        assertEquals(HandPoseRearmMode.TIMED, dev.autoscroll.nativeapp.settings.NativeSettings().pose.rearmMode)
         val executor = FakeExecutor()
         var now = 1000L
         val coordinator = ScrollActionCoordinator(executor, this, { now })
         coordinator.configure(inverted = true)
         coordinator.setSessionActive(true)
-        coordinator.process(pose(RecognizedHandPose.NEUTRAL, now)); runCurrent()
+        coordinator.process(pose(PoseId.OPEN_HAND, now)); runCurrent()
         now += 100
-        coordinator.process(pose(RecognizedHandPose.THUMBS_UP, now)); runCurrent()
+        coordinator.process(pose(PoseId.THUMBS_UP, now)); runCurrent()
         assertEquals(listOf(ScrollRequest(ScrollAction.SINGLE_TAP), ScrollRequest(ScrollAction.DOUBLE_TAP)), executor.requests)
-        coordinator.process(pose(RecognizedHandPose.CLOSED_HAND, now + 1)); runCurrent()
+        coordinator.process(pose(PoseId.CLOSED_HAND, now + 1)); runCurrent()
         assertEquals(2, executor.requests.size)
     }
 
@@ -49,19 +47,19 @@ class ScrollActionCoordinatorTest {
         val executor = FakeExecutor()
         var now = 1000L
         val coordinator = ScrollActionCoordinator(executor, this, { now })
-        coordinator.process(pose(RecognizedHandPose.NEUTRAL, now)); runCurrent()
+        coordinator.process(pose(PoseId.OPEN_HAND, now)); runCurrent()
         coordinator.setSessionActive(true)
-        coordinator.process(pose(RecognizedHandPose.THUMBS_UP, 999)); runCurrent()
+        coordinator.process(pose(PoseId.THUMBS_UP, 999)); runCurrent()
         now += 500
-        coordinator.process(pose(RecognizedHandPose.NEUTRAL, 1100)); runCurrent()
-        coordinator.process(pose(RecognizedHandPose.NEUTRAL, 1501)); runCurrent()
+        coordinator.process(pose(PoseId.OPEN_HAND, 1100)); runCurrent()
+        coordinator.process(pose(PoseId.OPEN_HAND, 1501)); runCurrent()
         executor.isReady = false
-        coordinator.process(pose(RecognizedHandPose.THUMBS_UP, now)); runCurrent()
+        coordinator.process(pose(PoseId.THUMBS_UP, now)); runCurrent()
         assertTrue(executor.requests.isEmpty())
         executor.isReady = true
         now += 100
-        coordinator.process(pose(RecognizedHandPose.THUMBS_UP, now)); runCurrent()
-        coordinator.process(pose(RecognizedHandPose.THUMBS_UP, now)); runCurrent()
+        coordinator.process(pose(PoseId.THUMBS_UP, now)); runCurrent()
+        coordinator.process(pose(PoseId.THUMBS_UP, now)); runCurrent()
         assertEquals(1, executor.requests.size)
     }
 
@@ -70,14 +68,14 @@ class ScrollActionCoordinatorTest {
         var now = 1000L
         val coordinator = ScrollActionCoordinator(executor, this, { now })
         coordinator.setSessionActive(true)
-        coordinator.process(pose(RecognizedHandPose.NEUTRAL, now)); runCurrent()
+        coordinator.process(pose(PoseId.OPEN_HAND, now)); runCurrent()
         now += 100
-        coordinator.process(pose(RecognizedHandPose.THUMBS_UP, now)); runCurrent()
+        coordinator.process(pose(PoseId.THUMBS_UP, now)); runCurrent()
         executor.completion!!.complete(ScrollExecutionResult.COMPLETED); runCurrent()
-        coordinator.process(pose(RecognizedHandPose.THUMBS_UP, now)); runCurrent()
+        coordinator.process(pose(PoseId.THUMBS_UP, now)); runCurrent()
         assertEquals(1, executor.requests.size)
         now += 100
-        coordinator.process(pose(RecognizedHandPose.THUMBS_UP, now))
+        coordinator.process(pose(PoseId.THUMBS_UP, now))
         coordinator.setSessionActive(false); runCurrent()
         assertEquals(1, executor.requests.size)
         assertEquals(0.0, coordinator.state.value.continuousPixelsPerSecond, 0.0)
@@ -88,12 +86,12 @@ class ScrollActionCoordinatorTest {
         var now = 1000L
         val coordinator = ScrollActionCoordinator(executor, this, { now })
         coordinator.setSessionActive(true)
-        coordinator.process(pose(RecognizedHandPose.POINTING_DOWN, now)); runCurrent()
+        coordinator.process(pose(PoseId.POINTING_DOWN, now)); runCurrent()
         now += 100
         coordinator.process(flick(FlickDirection.UP, now)); runCurrent()
         coordinator.configure(inverted = true)
         now += 100
-        coordinator.process(pose(RecognizedHandPose.POINTING_DOWN, now)); runCurrent()
+        coordinator.process(pose(PoseId.POINTING_DOWN, now)); runCurrent()
         now += 100
         coordinator.process(flick(FlickDirection.UP, now)); runCurrent()
         assertEquals(listOf(ScrollAction.FORWARD, ScrollAction.BACKWARD, ScrollAction.BACKWARD, ScrollAction.FORWARD),
@@ -105,21 +103,21 @@ class ScrollActionCoordinatorTest {
         var now = 1000L
         val coordinator = ScrollActionCoordinator(executor, this, { now })
         coordinator.setSessionActive(true)
-        coordinator.process(pose(RecognizedHandPose.POINTING_DOWN, 999))
-        coordinator.process(pose(RecognizedHandPose.POINTING_DOWN, 1001))
-        coordinator.process(pose(RecognizedHandPose.POINTING_DOWN, 1000)); runCurrent()
-        coordinator.process(pose(RecognizedHandPose.POINTING_DOWN, 1000)); runCurrent()
+        coordinator.process(pose(PoseId.POINTING_DOWN, 999))
+        coordinator.process(pose(PoseId.POINTING_DOWN, 1001))
+        coordinator.process(pose(PoseId.POINTING_DOWN, 1000)); runCurrent()
+        coordinator.process(pose(PoseId.POINTING_DOWN, 1000)); runCurrent()
         now = 1500
-        coordinator.process(pose(RecognizedHandPose.POINTING_DOWN, 1100)); runCurrent()
+        coordinator.process(pose(PoseId.POINTING_DOWN, 1100)); runCurrent()
         assertEquals(1, executor.requests.size)
-        assertEquals("Stale gesture or previous session", coordinator.state.value.rejectionReason)
+        assertEquals("Stale or out-of-order pose sample", coordinator.state.value.rejectionReason)
     }
 
     @Test fun pausedAndUnavailableRejectManualAndRecognition() = runTest {
         val executor = FakeExecutor()
         val coordinator = ScrollActionCoordinator(executor, this, { 1000L })
         coordinator.manual(ScrollAction.FORWARD)
-        coordinator.process(pose(RecognizedHandPose.POINTING_DOWN, 1000)); runCurrent()
+        coordinator.process(pose(PoseId.POINTING_DOWN, 1000)); runCurrent()
         assertTrue(executor.requests.isEmpty())
         coordinator.setSessionActive(true)
         executor.isReady = false
@@ -133,13 +131,13 @@ class ScrollActionCoordinatorTest {
         var now = 1000L
         val coordinator = ScrollActionCoordinator(executor, this, { now })
         coordinator.setSessionActive(true)
-        coordinator.process(pose(RecognizedHandPose.POINTING_DOWN, now)); runCurrent()
+        coordinator.process(pose(PoseId.POINTING_DOWN, now)); runCurrent()
         now++
-        coordinator.process(pose(RecognizedHandPose.POINTING_UP, now)); runCurrent()
+        coordinator.process(pose(PoseId.POINTING_UP, now)); runCurrent()
         assertEquals(1, executor.requests.size)
         assertTrue(coordinator.state.value.busy)
         executor.completion!!.complete(ScrollExecutionResult.COMPLETED); runCurrent()
-        coordinator.process(pose(RecognizedHandPose.POINTING_UP, now)); runCurrent()
+        coordinator.process(pose(PoseId.POINTING_UP, now)); runCurrent()
         assertEquals(1, executor.requests.size)
         assertFalse(coordinator.state.value.busy)
     }
@@ -181,7 +179,7 @@ class ScrollActionCoordinatorTest {
         var now = 1000L
         val coordinator = ScrollActionCoordinator(executor, this, { now })
         coordinator.setSessionActive(true)
-        coordinator.process(pose(RecognizedHandPose.POINTING_DOWN, now))
+        coordinator.process(pose(PoseId.POINTING_DOWN, now))
         now += 400
         runCurrent()
         assertTrue(executor.requests.isEmpty())
@@ -213,7 +211,7 @@ class ScrollActionCoordinatorTest {
         val coordinator = ScrollActionCoordinator(executor, this, { now })
         coordinator.setSessionActive(true)
         now += 25
-        coordinator.process(pose(RecognizedHandPose.POINTING_DOWN, 1000)); runCurrent()
+        coordinator.process(pose(PoseId.POINTING_DOWN, 1000), 1000); runCurrent()
         assertEquals(25L, coordinator.state.value.lastGestureToActionLatencyMs)
         coordinator.manual(ScrollAction.BACKWARD); runCurrent()
         assertNull(coordinator.state.value.lastGestureToActionLatencyMs)

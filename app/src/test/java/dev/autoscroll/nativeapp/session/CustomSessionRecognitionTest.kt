@@ -28,11 +28,23 @@ class CustomSessionRecognitionTest {
         return HandTrackingResult(time, HandPose(points.mapIndexed { i, (x, y) -> HandLandmark(i, .5 + x, .5 + y, 0.0) }))
     }
 
+    @Test fun defaultPresetPublishesCanonicalPose() {
+        val saved = PoseActions(enabled = false).withBinding(PoseId.POINTING_UP, PoseAction.BACK)
+        val session = SessionRecognition(NativeSettings(mode = GestureMode.POSE, poseActions = saved), null, bounds)
+        var decision: GestureDecision? = null
+        for (time in 1000L..1200L step 100) {
+            decision = session.process(sample(time, true), time, bounds, true).scroll
+        }
+        assertEquals(PoseId.POINTING_UP, decision!!.poseResult!!.pose)
+        assertEquals(PoseId.POINTING_UP, decision.poseResult!!.event)
+        assertEquals(PoseAction.BACK, saved.actionFor(PoseId.POINTING_UP))
+    }
+
     @Test fun savedMappingAndTargetChangeRequireReleaseAndFreshConfirmation() {
         val settings = NativeSettings(mode = GestureMode.POSE,
             poseActions = PoseActions(enabled = true).withBinding(PoseId.POINTING_UP, PoseAction.BACK))
         val session = SessionRecognition(settings, null, bounds)
-        fun process(time: Long, pointing: Boolean) = session.process(sample(time, pointing), time, bounds, true).scroll!!.customPose!!
+        fun process(time: Long, pointing: Boolean) = session.process(sample(time, pointing), time, bounds, true).scroll!!.poseResult!!
         process(1000, true); process(1100, true)
         assertEquals(PoseId.POINTING_UP, process(1200, true).event)
         session.targetChanged()

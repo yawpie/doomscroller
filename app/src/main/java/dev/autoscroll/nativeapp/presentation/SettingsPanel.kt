@@ -35,7 +35,7 @@ internal fun SettingsPanel(value: NativeSettings, onPractice: (() -> Unit)? = nu
         }
     }
     Text("Pointer uses one hand. Calibrate in Practice before controlling another app.")
-    SettingSwitch("Reverse scroll direction", "Reverse legacy pointing, flick and hand movement. Custom pose actions follow their selected direction.", value.inverted) {
+    SettingSwitch("Reverse scroll direction", "Reverse preset pointing, flick and hand movement. Custom pose actions follow their selected direction.", value.inverted) {
         update(value.copy(inverted = it))
     }
     PoseActionsPanel(value, update, onPractice)
@@ -97,10 +97,10 @@ internal fun AdvancedSettingsPanel(value: NativeSettings, state: GestureSessionS
         NumberSetting("Confirm (ms)", value.pose.confirmationDurationMs.toDouble(), 100.0..500.0, 19) {
             update(value.copy(pose = value.pose.copy(confirmationDurationMs = it.toLong())))
         }
-        NumberSetting("Rearm delay (ms)", value.pose.cooldownMs.toDouble(), 200.0..3000.0, 55) {
+        NumberSetting("Pose cooldown (ms)", value.pose.cooldownMs.toDouble(), 200.0..3000.0, 55) {
             update(value.copy(pose = value.pose.copy(cooldownMs = it.roundToLong())))
         }
-        Text("Pointing and thumbs-up can repeat after this delay and a fresh confirmation. Open hand sends one tap per presentation.")
+        Text("Actions run once per appearance. Show a different valid pose to release it; the cooldown also applies before the next action.")
         NumberSetting("Extended index / thumb angle", value.pose.minimumIndexAngle, 150.0..175.0) {
             update(value.copy(pose = value.pose.copy(minimumIndexAngle = it)))
         }

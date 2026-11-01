@@ -112,7 +112,7 @@ internal fun PracticeScreen(state: PracticeState, settings: NativeSettings, came
                         Text("The index + middle pose has its own action. A single-finger pose held long enough before changing is also a valid gesture.")
                         if (settings.mode == GestureMode.HYBRID) Text("A pose with no action does not block flick or movement controls.")
                     } else if (settings.mode == GestureMode.POSE || settings.mode == GestureMode.HYBRID) {
-                        Text("Point down for ${if (settings.inverted) "previous" else "next"}; point up for ${if (settings.inverted) "next" else "previous"}. Holding a pointing pose or thumbs-up can repeat after the saved rearm delay plus fresh confirmation.")
+                        Text("Point down for ${if (settings.inverted) "previous" else "next"}; point up for ${if (settings.inverted) "next" else "previous"}. Each action runs once per appearance. Show a different valid pose before repeating.")
                         Text("Open hand: Tap video once. It toggles this sample's playback, while tracking stays on. A held open hand will not tap again, even after tracking loss. Show a different visible pose before another open-hand tap.")
                         Text("Thumbs-up: Double tap. This sample counts it; another app decides what a double tap does.")
                     }
@@ -193,31 +193,18 @@ private fun PracticeLiveFeedback(state: PracticeState, settings: NativeSettings,
             Text("Last action: ${state.sample.lastAction}", style = MaterialTheme.typography.bodyMedium)
             Text("Confirmed actions: ${state.sample.actionCount} · Double taps: ${state.sample.doubleTaps}",
                 style = MaterialTheme.typography.bodyMedium)
-            if (settings.poseActions.enabled && (settings.mode == GestureMode.POSE || settings.mode == GestureMode.HYBRID)) {
-                Text("Pose: ${state.sample.customPose?.let(::poseIdLabel) ?: "Not recognized"}")
+            if (settings.mode == GestureMode.POSE || settings.mode == GestureMode.HYBRID) {
+                Text("Pose: ${state.sample.pose?.let(::poseIdLabel) ?: "Not recognized"}")
                 Text("Selected action: ${poseActionLabel(state.sample.selectedAction)}")
-                Text(state.sample.inactiveReason ?: when (state.sample.customPhase) {
+                Text(state.sample.inactiveReason ?: when (state.sample.posePhase) {
                     HandPosePhase.CONFIRMING -> "Hold steady · confirming"
                     HandPosePhase.LATCHED -> "Pose confirmed"
-                    HandPosePhase.WAITING_REARM -> "Waiting for release"
                     HandPosePhase.READY -> "Ready for a gesture"
                 })
-                if (state.sample.customPhase == HandPosePhase.CONFIRMING)
-                    LinearProgressIndicator(progress = { state.sample.customConfirmation.toFloat() },
+                if (state.sample.posePhase == HandPosePhase.CONFIRMING)
+                    LinearProgressIndicator(progress = { state.sample.poseConfirmation.toFloat() },
                         modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Pose confirmation progress" })
                 Text("Hold activations: ${state.sample.holdActivations}")
-            } else if (settings.mode == GestureMode.POSE || settings.mode == GestureMode.HYBRID) {
-                Text("Pose: ${poseLabel(state.sample.pose)}", style = MaterialTheme.typography.bodyMedium)
-                Text(when (state.sample.phase) {
-                    HandPosePhase.CONFIRMING -> "Hold steady · confirming"
-                    HandPosePhase.LATCHED -> if (state.sample.cooldownMs > 0) "Rearm delay: ${state.sample.cooldownMs} ms"
-                        else "Ready for fresh confirmation"
-                    HandPosePhase.WAITING_REARM -> "Waiting for the configured release pose"
-                    HandPosePhase.READY -> "Ready for a gesture"
-                }, style = MaterialTheme.typography.bodyMedium)
-                if (state.sample.phase == HandPosePhase.CONFIRMING)
-                    LinearProgressIndicator(progress = { state.sample.confirmation.toFloat() },
-                        modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Pose confirmation progress" })
             }
             if (state.sample.velocity != 0.0 && !settings.poseActions.enabled) Text("Feed moves while your palm moves. Hold still to stop.",
                 style = MaterialTheme.typography.bodyMedium)
@@ -275,13 +262,4 @@ private fun SampleFeed(sample: PracticeSample, openDetail: () -> Unit, canOpenDe
             Text("Double taps: ${sample.doubleTaps}")
         }
     }
-}
-
-private fun poseLabel(pose: RecognizedHandPose) = when (pose) {
-    RecognizedHandPose.POINTING_UP -> "Pointing up"
-    RecognizedHandPose.POINTING_DOWN -> "Pointing down"
-    RecognizedHandPose.NEUTRAL -> "Open hand · Tap video"
-    RecognizedHandPose.THUMBS_UP -> "Thumbs-up · Double tap"
-    RecognizedHandPose.CLOSED_HAND -> "Curled hand"
-    RecognizedHandPose.UNKNOWN -> "Not recognized"
 }

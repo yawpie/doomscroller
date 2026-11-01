@@ -3,87 +3,69 @@ package dev.autoscroll.nativeapp.gesture
 class GestureCoordinator(
     val motionDetector: ContinuousMotionDetector = ContinuousMotionDetector(),
     val flickDetector: FlickDetector = FlickDetector(),
-    var poseDetector: HandPoseDetector = HandPoseDetector(),
+    poseConfig: HandPoseDetectionConfig = HandPoseDetectionConfig(),
     var mode: GestureMode = GestureMode.HYBRID,
-    private val poseActions: PoseActions = PoseActions(),
+    poseActions: PoseActions = PoseActions(),
 ) {
+    val poseDetector = HandPoseDetector(poseConfig, poseActions)
     private var wasSuppressed = false
-    private var customDetector = if (poseActions.enabled) CustomPoseDetector(poseActions, poseDetector.config) else null
-    private var customMode = mode
+    private var previousMode = mode
 
     fun process(result: HandTrackingResult): GestureDecision {
-        if (customMode != mode) {
-            customDetector?.reset()
-            customMode = mode
+        if (previousMode != mode) {
+            poseDetector.targetChanged()
+            motionDetector.reset()
+            flickDetector.reset()
+            previousMode = mode
         }
         if (result.pose == null) {
             loseTracking()
             return GestureDecision(HandMotion(HandAction.STOP), suppressesContinuous = true,
-                customPose = if (mode == GestureMode.POSE || mode == GestureMode.HYBRID) customDetector?.process(result) else null)
+                poseResult = if (mode == GestureMode.POSE || mode == GestureMode.HYBRID) poseDetector.process(result) else null)
         }
         if (mode == GestureMode.CONTINUOUS) return GestureDecision(motionDetector.process(result))
         if (mode == GestureMode.FLICK) return suppressed(result, flick = flickDetector.process(result))
-        customDetector?.let { return processCustom(result, it) }
-        if (poseDetector.suppressesContinuous || mode == GestureMode.POSE) {
-            val pose = poseDetector.process(result)
-            flickDetector.reset()
-            return suppressed(result, pose = pose)
-        }
-        if (flickDetector.ownsGesture) return suppressed(result, flick = flickDetector.process(result))
-        val pose = poseDetector.process(result)
-        if (poseDetector.suppressesContinuous) {
-            flickDetector.reset()
-            return suppressed(result, pose = pose)
-        }
-        val flick = flickDetector.process(result)
-        if (flickDetector.suppressesContinuous) return suppressed(result, flick = flick)
-        wasSuppressed = false
-        return GestureDecision(motionDetector.process(result))
-    }
-
-    private fun processCustom(result: HandTrackingResult, detector: CustomPoseDetector): GestureDecision {
         if (mode != GestureMode.POSE && flickDetector.ownsGesture) {
-            val custom = detector.processPose(result.timestampMs, null)
-            return suppressed(result, flick = flickDetector.process(result), customPose = custom)
+            val pose = poseDetector.processPose(result.timestampMs, null)
+            return suppressed(result, flick = flickDetector.process(result), poseResult = pose)
         }
-        val custom = detector.process(result)
-        if (detector.ownsGesture || mode == GestureMode.POSE) {
+        val pose = poseDetector.process(result)
+        if (poseDetector.ownsGesture || mode == GestureMode.POSE) {
             flickDetector.reset()
-            return suppressed(result, customPose = custom)
+            return suppressed(result, poseResult = pose)
         }
         val flick = flickDetector.process(result)
-        if (flickDetector.suppressesContinuous) return suppressed(result, flick = flick, customPose = custom)
+        if (flickDetector.suppressesContinuous) return suppressed(result, flick = flick, poseResult = pose)
         wasSuppressed = false
-        return GestureDecision(motionDetector.process(result), customPose = custom)
+        return GestureDecision(motionDetector.process(result), poseResult = pose)
     }
 
-    private fun suppressed(result: HandTrackingResult, pose: PoseEvent? = null, flick: FlickEvent? = null,
-        customPose: CustomPoseResult? = null): GestureDecision {
+    private fun suppressed(result: HandTrackingResult, flick: FlickEvent? = null, poseResult: PoseResult? = null): GestureDecision {
         if (!wasSuppressed) motionDetector.reset()
         wasSuppressed = true
         return GestureDecision(HandMotion(HandAction.IDLE, smoothedY = result.pose!!.palmY),
-            flick = flick, pose = pose, suppressesContinuous = true, customPose = customPose)
+            flick = flick, suppressesContinuous = true, poseResult = poseResult)
     }
 
-    fun configure(detector: HandPoseDetector? = null, mode: GestureMode? = null) {
-        reset()
-        if (detector != null) {
-            poseDetector = detector
-            if (poseActions.enabled) customDetector = CustomPoseDetector(poseActions, detector.config)
-        }
+    fun configure(poseConfig: HandPoseDetectionConfig? = null, mode: GestureMode? = null) {
+        poseDetector.targetChanged()
+        motionDetector.reset()
+        flickDetector.reset()
+        if (poseConfig != null && poseConfig != poseDetector.config) poseDetector.configure(poseConfig)
         if (mode != null) this.mode = mode
+        previousMode = this.mode
+        wasSuppressed = true
     }
 
     fun loseTracking() {
         motionDetector.reset()
         flickDetector.loseTracking()
         poseDetector.loseTracking()
-        customDetector?.loseTracking()
         wasSuppressed = true
     }
 
     fun targetChanged() {
-        customDetector?.targetChanged()
+        poseDetector.targetChanged()
         motionDetector.reset()
         flickDetector.reset()
         wasSuppressed = true
@@ -93,7 +75,6 @@ class GestureCoordinator(
         motionDetector.reset()
         flickDetector.reset()
         poseDetector.reset()
-        customDetector?.reset()
         wasSuppressed = false
     }
 }

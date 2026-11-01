@@ -1,5 +1,7 @@
 # Native migration report — 2026-10-09
 
+> Historical migration details below describe earlier revisions. Current pose behavior and fixture coverage are documented in [unified pose validation](unified-pose-recognition-validation.md) and the [fixture guide](../parity-fixtures/README.md).
+
 ## Status
 
 Native implementation is present and independently buildable. Camera/service/overlay/accessibility/Compose integration is implemented; recognition parity, unit checks, native build and lint pass. Physical acceptance and release readiness are separate gates. The legacy Flutter variant has been removed at the user's request. Historical source remains in Git; native fixtures and the licensed model are self-contained. Device acceptance remains pending and does not block source retirement.

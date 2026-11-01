@@ -29,6 +29,27 @@ class CustomPracticeFeedbackTest {
         return PracticeFeedback(NativeSettings(mode = GestureMode.POSE, poseActions = actions, inverted = inverted))
     }
 
+    @Test fun defaultPresetPublishesCanonicalPose() {
+        val feedback = PracticeFeedback(NativeSettings(mode = GestureMode.POSE))
+        for (t in 0L..200L step 100) feedback.process(sample(t, setOf(5)))
+        assertEquals(PoseId.POINTING_UP, feedback.state.pose)
+    }
+
+    @Test fun defaultPresetFiresOnceWithInversionAndKeepsSavedBindings() {
+        val saved = PoseActions(enabled = false).withBinding(PoseId.POINTING_UP, PoseAction.BACK)
+        val normal = PracticeFeedback(NativeSettings(mode = GestureMode.POSE, poseActions = saved))
+        val inverted = PracticeFeedback(NativeSettings(mode = GestureMode.POSE, poseActions = saved, inverted = true))
+        for (t in 0L..3000L step 100) {
+            val frame = sample(t, setOf(5))
+            normal.process(frame); inverted.process(frame)
+        }
+        assertEquals(1, normal.state.actionCount)
+        assertEquals(1, inverted.state.actionCount)
+        assertEquals(1.0, normal.state.position, 0.0)
+        assertEquals(3.0, inverted.state.position, 0.0)
+        assertEquals(PoseAction.BACK, saved.actionFor(PoseId.POINTING_UP))
+    }
+
     @Test fun combinationUsesOnlyItsOwnActionAndBackStaysLocalAtRoot() {
         val f = feedback(PoseAction.SINGLE_TAP, PoseAction.DOUBLE_TAP, PoseAction.BACK)
         f.openLocalDetail()
