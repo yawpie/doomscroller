@@ -15,12 +15,13 @@ data class NativeSettings(
     val swipeDurationMs: Long = 220,
     val swipeDistance: Double = 0.5,
     val controlMode: ControlMode = ControlMode.SCROLL,
+    val poseActions: PoseActions = PoseActions(),
 )
 
 enum class ControlMode { SCROLL, POINTER }
 internal fun controlModeFromPreference(value: String?) = ControlMode.entries.firstOrNull { it.name == value } ?: ControlMode.SCROLL
 
-enum class SettingsGroup { RECOGNITION, SWIPE, CAMERA, POSES, FLICK, MOVEMENT }
+enum class SettingsGroup { RECOGNITION, SWIPE, CAMERA, POSES, FLICK, MOVEMENT, POSE_ACTIONS }
 
 fun NativeSettings.reset(group: SettingsGroup): NativeSettings {
     val defaults = NativeSettings()
@@ -30,6 +31,7 @@ fun NativeSettings.reset(group: SettingsGroup): NativeSettings {
             scroll = scroll.copy(flickDurationMs = defaults.scroll.flickDurationMs))
         SettingsGroup.CAMERA -> copy(tracking = defaults.tracking)
         SettingsGroup.POSES -> copy(pose = defaults.pose)
+        SettingsGroup.POSE_ACTIONS -> copy(poseActions = defaults.poseActions)
         SettingsGroup.FLICK -> copy(flick = defaults.flick)
         SettingsGroup.MOVEMENT -> copy(motion = defaults.motion,
             scroll = scroll.copy(pixelsPerNormalizedUnit = defaults.scroll.pixelsPerNormalizedUnit))
