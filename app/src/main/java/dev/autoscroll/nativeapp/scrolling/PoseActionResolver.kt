@@ -6,6 +6,13 @@ import dev.autoscroll.nativeapp.settings.NativeSettings
 
 /** Resolves actions only; recognition and dispatch remain with their existing owners. */
 object PoseActionResolver {
+    // shortcut: provisional 300 px/s; calibrate touch slop and comfort on physical targets before acceptance.
+    fun holdVelocity(action: PoseAction): Double = when (action) {
+        PoseAction.CONTINUOUS_NEXT -> 300.0
+        PoseAction.CONTINUOUS_PREVIOUS -> -300.0
+        else -> 0.0
+    }
+
     fun custom(pose: PoseId, settings: NativeSettings): PoseAction =
         if (settings.poseActions.enabled && settings.controlMode == ControlMode.SCROLL &&
             (settings.mode == GestureMode.POSE || settings.mode == GestureMode.HYBRID))

@@ -6,6 +6,21 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PoseActionResolverTest {
+    @Test fun everyBindingAcceptsEveryActionIndependentlyAndAllNoneIsValid() {
+        val empty = PoseActions(enabled = true, bindings = PoseId.entries.associateWith { PoseAction.NONE })
+        for (pose in PoseId.entries) for (action in PoseAction.entries) {
+            val changed = empty.copy(profile = pose.profile ?: PoseRecognitionProfile.DIRECTION).withBinding(pose, action)
+            val settings = NativeSettings(mode = GestureMode.POSE, poseActions = changed)
+            assertEquals(action, PoseActionResolver.custom(pose, settings))
+            assertTrue(changed.bindings.filterKeys { it != pose }.values.all { it == PoseAction.NONE })
+        }
+        assertTrue(empty.bindings.values.all { it == PoseAction.NONE })
+        val forward = PoseActionResolver.holdVelocity(PoseAction.CONTINUOUS_NEXT)
+        assertTrue(forward > 0.0)
+        assertEquals(-forward, PoseActionResolver.holdVelocity(PoseAction.CONTINUOUS_PREVIOUS), 0.0)
+        assertEquals(0.0, PoseActionResolver.holdVelocity(PoseAction.BACK), 0.0)
+    }
+
     @Test fun profilesBindingsAndSnapshotsAreIndependent() {
         val mutable = PoseActions.defaultBindings().toMutableMap()
         val original = PoseActions(true, PoseRecognitionProfile.FINGER_COMBINATIONS, mutable)
