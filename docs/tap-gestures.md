@@ -1,6 +1,6 @@
 # Native tap gestures
 
-This extension applies to the native Android app. The saved Dart parity fixtures remain unchanged; legacy production source is preserved in Git history. Use HYBRID (default) or POSE mode and enable the existing accessibility service through Android Settings.
+The following legacy mapping applies when custom pose actions are off (the default). This extension applies to the native Android app. The saved Dart parity fixtures remain unchanged; legacy production source is preserved in Git history. Use HYBRID (default) or POSE mode and enable the existing accessibility service through Android Settings.
 
 | Pose | Action |
 | --- | --- |
@@ -18,6 +18,42 @@ Single tap toggles pause/play in feeds that support tapping their center; it can
 Single tap uses a 50ms stationary touch. Double tap uses two 50ms stationary touches in one dispatch, with a 100ms up-to-down gap capped at half Android's double-tap timeout. The implementation follows the public [StrokeDescription contract](https://developer.android.com/reference/android/accessibilityservice/GestureDescription.StrokeDescription) and [ViewConfiguration timeout](https://developer.android.com/reference/android/view/ViewConfiguration#getDoubleTapTimeout()). Pause/Stop blocks future dispatch; Android provides no public cancellation of an already submitted short gesture.
 
 Dashboard's camera-free Single tap / Double tap buttons let you check target-app behavior before enabling capture. First open the target app, return to Hand Scroll, keep the session Stopped, and choose the test. Hand Scroll backgrounds and dispatches after one second.
+
+## Custom pose actions
+
+In Scroll with POSE or HYBRID, enable custom pose actions in the Settings draft,
+choose one profile and Apply. The direction profile supports pointing up, down,
+left and right; the finger profile supports index only, middle only and index +
+middle as independent poses. Open hand, closed hand and thumbs-up are shared
+between profiles. Open hand requires five open fingers; the closed fist keeps the
+thumb near the curled fingers; thumbs-up extends the thumb. Ambiguous shapes do
+not select a nearest supported combination. The profiles do not fall back to each
+other. Custom mappings are saved but inactive in Pointer, FLICK and CONTINUOUS.
+
+| Pose | Default custom action |
+| --- | --- |
+| Point up / down | Previous / next item once |
+| Point left / right | None |
+| Open hand / closed hand | Single tap / none |
+| Index only / middle only / index + middle | None for each |
+| Thumbs-up | Double tap |
+
+Each binding can instead select NONE, next or previous once, single or double
+center tap, Back, or continuous next/previous while held. Discrete actions run once
+per appearance; continuous begins after confirmation and needs fresh held samples.
+NONE leaves HYBRID flick/movement available. Custom next/previous directions are
+final; reversal still applies to legacy pointing and movement/flick. Reset pose
+actions resets only that draft group; Apply saves and pauses active tracking.
+Practice uses saved settings and simulates Back and other actions locally.
+
+Continuous pose uses one 100 ms swipe at a time with a provisional 300 px/s
+velocity. Busy samples are dropped, with no backlog. Invalid or stale pose, target
+change, lifecycle or safety guards stop new submissions; a submitted segment may
+still finish. This speed and touch-slop behavior need real-device calibration.
+Back uses Android's public [performGlobalAction](https://developer.android.com/reference/android/accessibilityservice/AccessibilityService#performGlobalAction(int))
+API. ACCEPTED means Android accepted the request, not that a screen changed.
+See the [validation receipt](custom-pose-actions-validation.md) for actual checks
+and remaining physical acceptance.
 
 ## Verification
 

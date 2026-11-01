@@ -2,7 +2,7 @@ package dev.autoscroll.nativeapp.settings
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import dev.autoscroll.nativeapp.gesture.HandPoseRearmMode
+import dev.autoscroll.nativeapp.gesture.*
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -44,6 +44,49 @@ class SettingsStoreTest {
             }
         } finally {
             store.update(original)
+        }
+    }
+    @Test fun poseActionsRoundTripAndCorruptFieldsDoNotResetOtherSettings() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val preferences = context.getSharedPreferences("gesture_settings", android.content.Context.MODE_PRIVATE)
+        val saved = preferences.all.filterKeys { it.startsWith("poseActions.") }
+        val original = SettingsStore(context).state.value
+        try {
+            val actions = PoseActions(true, PoseRecognitionProfile.FINGER_COMBINATIONS)
+                .withBinding(PoseId.INDEX_ONLY, PoseAction.BACK)
+                .withBinding(PoseId.MIDDLE_ONLY, PoseAction.NEXT_ITEM)
+                .withBinding(PoseId.INDEX_MIDDLE, PoseAction.CONTINUOUS_PREVIOUS)
+            val store = SettingsStore(context)
+            store.update(original.copy(poseActions = actions))
+            assertEquals(actions, SettingsStore(context).state.value.poseActions)
+            preferences.edit().putString("poseActions.binding.INDEX_ONLY.action", "invalid")
+                .putString("poseActions.profile", "invalid").commit()
+            val reloaded = SettingsStore(context).state.value
+            assertEquals(original.mode, reloaded.mode)
+            assertEquals(original.pose, reloaded.pose)
+            assertEquals(PoseAction.NONE, reloaded.poseActions.bindings[PoseId.INDEX_ONLY])
+            assertEquals(PoseAction.NEXT_ITEM, reloaded.poseActions.bindings[PoseId.MIDDLE_ONLY])
+            assertEquals(PoseRecognitionProfile.DIRECTION, reloaded.poseActions.profile)
+            preferences.edit().putInt("poseActions.version", 99).commit()
+            val future = SettingsStore(context)
+            assertFalse(future.state.value.poseActions.enabled)
+            future.update(future.state.value.copy(inverted = !future.state.value.inverted))
+            assertEquals(99, preferences.getInt("poseActions.version", 0))
+            assertEquals("invalid", preferences.getString("poseActions.binding.INDEX_ONLY.action", null))
+        } finally {
+            SettingsStore(context).update(original)
+            val editor = preferences.edit()
+            preferences.all.keys.filter { it.startsWith("poseActions.") }.forEach { editor.remove(it) }
+            saved.forEach { (key, value) -> when (value) {
+                is String -> editor.putString(key, value)
+                is Boolean -> editor.putBoolean(key, value)
+                is Int -> editor.putInt(key, value)
+                is Long -> editor.putLong(key, value)
+                is Float -> editor.putFloat(key, value)
+                is Set<*> -> editor.putStringSet(key, value.filterIsInstance<String>().toSet())
+                else -> Unit
+            } }
+            editor.commit()
         }
     }
 }

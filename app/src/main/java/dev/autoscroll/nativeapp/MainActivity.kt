@@ -103,6 +103,7 @@ class MainActivity : ComponentActivity() {
                     PracticeScreen(practiceState, settings, cameraGranted, cameraBlocked, cameraExplanation, permissionError,
                         onCameraPermission = requestCamera, onStart = { practice.start(settings) },
                         onStop = { practice.stop() }, onExit = ::leavePractice,
+                        onOpenLocalDetail = practice::openLocalDetail,
                         onCaptureCorner = practice::capturePointerCorner,
                         onResetCalibration = practice::resetPointerCalibration,
                         onUseCalibration = {

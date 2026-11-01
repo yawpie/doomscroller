@@ -19,6 +19,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.autoscroll.nativeapp.gesture.GestureMode
+import dev.autoscroll.nativeapp.gesture.PoseId
 import dev.autoscroll.nativeapp.scrolling.ScrollAction
 import dev.autoscroll.nativeapp.session.GestureSessionState
 import dev.autoscroll.nativeapp.session.SessionDiagnostics
@@ -64,10 +65,12 @@ internal fun HandScrollScreen(
     var showSetup by rememberSaveable { mutableStateOf(false) }
     var advanced by rememberSaveable { mutableStateOf(false) }
     var applyMessage by remember { mutableStateOf<String?>(null) }
+    var showUnsavedPractice by rememberSaveable { mutableStateOf(false) }
     val pointerMode = settings.controlMode == ControlMode.POINTER
     val ready = readyToStart(cameraGranted, accessibility, consent, settings.overlayEnabled, overlayGranted,
         settings.controlMode, pointerConsent, pointerCalibrated || state == GestureSessionState.Active || state == GestureSessionState.Starting)
     val dirty = draft != settings
+    val openPractice: () -> Unit = { if (dirty) showUnsavedPractice = true else onPractice?.invoke() }
     Surface(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
             Text("Scroll Vision", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(16.dp))
@@ -104,7 +107,7 @@ internal fun HandScrollScreen(
                                 if (pointerMode && state != GestureSessionState.Active && state != GestureSessionState.Starting) {
                                     Text(if (pointerCalibrated) "Practice calibration is ready for one new Start."
                                         else "Calibrate in Practice, then choose Use calibration. Return here and press Start explicitly.")
-                                    if (!pointerCalibrated && onPractice != null) OutlinedButton(onClick = onPractice,
+                                    if (!pointerCalibrated && onPractice != null) OutlinedButton(onClick = openPractice,
                                         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Calibrate in Practice") }
                                 }
                                 if (pointerMode && diagnostics.pointer != null) {
@@ -156,7 +159,7 @@ internal fun HandScrollScreen(
                             }
                             SetupStep("2 · Accessibility", accessibility && consent && (!pointerMode || pointerConsent),
                                 if (pointerMode) "Pointer touches use the cursor location: press, hold, drag and release. Screen content, typed text and passwords are not read."
-                                else "Sends the swipes and taps you request. Screen content, typed text and passwords are not read.") {
+                                else "Sends the swipes, taps and mapped Back actions you request. Screen content, typed text and passwords are not read.") {
                                 if (!accessibility || !consent || pointerMode && !pointerConsent) Text("Read and agree to the disclosure, then enable Scroll Vision gestures in Android Settings. If Android restricts access, open App info and review its restricted settings option.")
                                 OutlinedButton(onClick = { disclosure = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                                     Text(if (accessibility && consent && (!pointerMode || pointerConsent)) "Review access" else "Review and enable accessibility")
@@ -190,14 +193,16 @@ internal fun HandScrollScreen(
                     "Gestures" -> {
                         Text("Learn your gestures", style = MaterialTheme.typography.titleLarge)
                         Text(if (pointerMode) "Current mode: Pointer. Keep one whole hand visible and well lit."
-                            else "Current mode: ${modeLabel(settings.mode)}${if (settings.inverted) " · direction reversed" else ""}. Keep your whole hand visible and well lit.")
-                        if (onPractice != null) Button(onClick = onPractice, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text("Practice safely") }
+                            else "Current mode: ${modeLabel(settings.mode)}${if (settings.inverted && !settings.poseActions.enabled) " · direction reversed" else if (settings.inverted) " · flick and movement reversed" else ""}. Keep your whole hand visible and well lit.")
+                        if (onPractice != null) Button(onClick = openPractice, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text("Practice safely") }
                         if (pointerMode) {
+                            if (settings.poseActions.enabled) Text("Custom pose actions are inactive in Pointer mode.")
                             Text("Calibrate two comfortable corners in Practice with the screen buttons, then choose Use calibration. Home Start is always a separate action.")
                             Text("Extend your index finger to aim. Pinch thumb and index finger to press; keep pinched to hold; move while pinched to drag; separate to release. Start with fingers separated and a steady hand.")
                             Text("The cursor hides on tracking loss, your floating controls, Scroll Vision, screen lock and blocked apps. A target-app change requests release of the current touch. Reacquire with separated fingers; never resume a held pinch automatically.")
                         } else {
-                        if (settings.mode == GestureMode.HYBRID || settings.mode == GestureMode.POSE) {
+                        if (settings.poseActions.enabled) SavedPoseActionsGuide(settings)
+                        if (!settings.poseActions.enabled && (settings.mode == GestureMode.HYBRID || settings.mode == GestureMode.POSE)) {
                             GestureCard(if (settings.inverted) "Previous item" else "Next item", HandDrawing.DOWN,
                                 "Point your index finger down. Curl the other fingers.", "Holding this pose can repeat after the rearm delay and fresh confirmation.")
                             GestureCard(if (settings.inverted) "Next item" else "Previous item", HandDrawing.UP,
@@ -211,19 +216,19 @@ internal fun HandScrollScreen(
                         }
                         if (settings.mode == GestureMode.HYBRID || settings.mode == GestureMode.FLICK) {
                             GestureCard("Flick to navigate", HandDrawing.FLICK,
-                                "Move your palm quickly down or up to ${if (settings.inverted) "go back or forward" else "go forward or back"}. In Hybrid, curl your fingers and keep your thumb relaxed to avoid a pose tap.",
+                                "Move your palm quickly down or up to ${if (settings.inverted) "go back or forward" else "go forward or back"}. In Hybrid, be mindful of your active pose bindings.",
                                 "Settle your hand before the next flick; cooldown and rearm prevent immediate repeats.")
                         }
                         if (settings.mode == GestureMode.HYBRID || settings.mode == GestureMode.CONTINUOUS) {
                             GestureCard("Move to scroll", HandDrawing.MOVEMENT,
-                                "Move your palm vertically for continuous scrolling. Direction follows hand movement${if (settings.inverted) " with reversal enabled" else ""}. In Hybrid, curl your fingers and keep your thumb relaxed to avoid a pose tap.",
+                                "Move your palm vertically for continuous scrolling. Direction follows hand movement${if (settings.inverted) " with reversal enabled" else ""}. In Hybrid, be mindful of your active pose bindings.",
                                 "Hold still to stop scrolling. In Hybrid mode, poses and flicks take priority.")
                         }
                         Card(Modifier.fillMaxWidth()) {
                             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text("Pause tracking", style = MaterialTheme.typography.titleMedium)
                                 Text("Press Pause tracking on Home, or Pause in the floating controls or notification. It releases the camera and stops gesture actions. Open Home and press Resume tracking to continue.")
-                                Text("Tap video and Pause tracking do different things. The open-hand gesture taps your feed; it does not turn tracking off.")
+                                Text("Pose actions do not pause tracking; use the session controls to pause.")
                             }
                         }
                         Text("Pause before sensitive interactions: gesture actions can interrupt a finger touch. System settings, permission screens, launcher and Scroll Vision are blocked targets. Screen lock pauses tracking; process restart stays stopped.", style = MaterialTheme.typography.bodyMedium)
@@ -249,7 +254,7 @@ internal fun HandScrollScreen(
                                 manualRunning = manualRunning, manualResult = manualResult,
                                 update = { onDraftChange(it); applyMessage = null }, test = onTestAction)
                         } else {
-                            SettingsPanel(draft) { onDraftChange(it); applyMessage = null }
+                            SettingsPanel(draft, if (onPractice != null) openPractice else null) { onDraftChange(it); applyMessage = null }
                             OutlinedButton(onClick = { advanced = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Advanced") }
                             Text("Recognition tuning, camera settings, diagnostics and external action tests.", style = MaterialTheme.typography.bodyMedium)
                         }
@@ -258,13 +263,20 @@ internal fun HandScrollScreen(
             }
         }
     }
+    if (showUnsavedPractice) AlertDialog(
+        onDismissRequest = { showUnsavedPractice = false },
+        title = { Text("Unsaved changes") },
+        text = { Text("Apply or discard your settings changes before opening Practice. Practice uses saved settings.") },
+        confirmButton = { TextButton(onClick = { showUnsavedPractice = false; page = "Settings" }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Go to Settings") } },
+        dismissButton = { TextButton(onClick = { showUnsavedPractice = false }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Cancel") } },
+    )
     if (disclosure) AlertDialog(
         onDismissRequest = { disclosure = false },
         title = { Text(if (pointerMode) "Allow pointer controlled screen actions" else "Allow gesture controlled screen actions") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text(if (pointerMode) "Scroll Vision uses Android Accessibility to send a touch at the pointer cursor: pinch to press, keep pinched to hold, move while pinched to drag, and separate to release. A short press becomes a tap. Other apps decide how these touches behave. It receives only the current app's package name to block unsafe targets; it does not read screen content, text or passwords. Touches may interrupt manual input. Pause, Stop, tracking loss, lock or an app change requests release; an already submitted segment may finish first. Releasing a short touch can still activate its target, and a long-press action cannot always be undone. If release cannot be confirmed, new actions stop: touch the screen manually, acknowledge recovery in Home, then recalibrate and explicitly Start. Camera images stay on your device. You can pause, stop or disable the service in Android Settings at any time."
-                    else "Scroll Vision uses Android Accessibility to send vertical swipes, center single taps, and center double taps requested by your hand gestures or external test buttons in other apps. It receives only the current app's package name to block unsafe targets. It does not read screen content, text, or passwords. Actions may interrupt an ongoing touch. You can pause, stop, or disable the service in Android Settings at any time.")
+                    else "Scroll Vision uses Android Accessibility to send vertical swipes, center taps and mapped Android Back actions requested by your hand gestures in other apps. Continuous pose actions send short swipes while the pose is held. External test buttons send individual swipes or taps. It receives only the current app's package name to block unsafe targets. It does not read screen content, text, or passwords. Actions may interrupt an ongoing touch. You can pause, stop, or disable the service in Android Settings at any time.")
             }
         },
         confirmButton = { TextButton(onClick = { disclosure = false; if (pointerMode) onPointerConsent() else onAccessibilityConsent() },
@@ -297,7 +309,18 @@ private fun GestureCard(title: String, drawing: HandDrawing, instruction: String
     }
 }
 
-private enum class HandDrawing { UP, DOWN, OPEN, THUMB, FLICK, MOVEMENT }
+private enum class HandDrawing { UP, DOWN, LEFT, RIGHT, INDEX_ONLY, MIDDLE_ONLY, INDEX_MIDDLE, OPEN, CLOSED, THUMB, FLICK, MOVEMENT }
+
+@Composable
+internal fun PoseIllustration(pose: PoseId) {
+    HandIllustration(when (pose) {
+        PoseId.POINTING_UP -> HandDrawing.UP; PoseId.POINTING_DOWN -> HandDrawing.DOWN
+        PoseId.POINTING_LEFT -> HandDrawing.LEFT; PoseId.POINTING_RIGHT -> HandDrawing.RIGHT
+        PoseId.INDEX_ONLY -> HandDrawing.INDEX_ONLY; PoseId.MIDDLE_ONLY -> HandDrawing.MIDDLE_ONLY
+        PoseId.INDEX_MIDDLE -> HandDrawing.INDEX_MIDDLE; PoseId.OPEN_HAND -> HandDrawing.OPEN
+        PoseId.CLOSED_HAND -> HandDrawing.CLOSED; PoseId.THUMBS_UP -> HandDrawing.THUMB
+    })
+}
 
 @Composable
 private fun HandIllustration(drawing: HandDrawing) {
@@ -307,6 +330,12 @@ private fun HandIllustration(drawing: HandDrawing) {
         contentDescription = when (drawing) {
             HandDrawing.UP -> "Hand illustration: index finger pointing up, other fingers curled"
             HandDrawing.DOWN -> "Hand illustration: index finger pointing down, other fingers curled"
+            HandDrawing.LEFT -> "Hand illustration: index finger pointing left, other fingers and thumb curled"
+            HandDrawing.RIGHT -> "Hand illustration: index finger pointing right, other fingers and thumb curled"
+            HandDrawing.INDEX_ONLY -> "Hand illustration: index finger extended, other fingers and thumb curled"
+            HandDrawing.MIDDLE_ONLY -> "Hand illustration: middle finger extended, other fingers and thumb curled"
+            HandDrawing.INDEX_MIDDLE -> "Hand illustration: index and middle fingers extended, other fingers and thumb curled"
+            HandDrawing.CLOSED -> "Hand illustration: four fingers curled, thumb close to fist"
             HandDrawing.THUMB -> "Hand illustration: thumbs-up, four fingers curled"
             HandDrawing.OPEN -> "Hand illustration: open palm"
             else -> "Hand illustration: curled fingers, relaxed thumb, vertical movement arrows"
@@ -314,7 +343,7 @@ private fun HandIllustration(drawing: HandDrawing) {
     }) {
         val factor = size.height / 140f
         scale(factor, factor, pivot = center) {
-            rotate(if (drawing == HandDrawing.DOWN) 180f else 0f, pivot = center) {
+            rotate(when (drawing) { HandDrawing.DOWN -> 180f; HandDrawing.LEFT -> -90f; HandDrawing.RIGHT -> 90f; else -> 0f }, pivot = center) {
                 val left = center.x - 32f
                 val top = center.y - 5f
                 fun finger(x: Float, y: Float, width: Float, height: Float) {
@@ -324,10 +353,22 @@ private fun HandIllustration(drawing: HandDrawing) {
                 finger(left + 12f, top + 42f, 38f, 22f)
                 finger(left, top, 66f, 48f)
                 when (drawing) {
-                    HandDrawing.UP, HandDrawing.DOWN -> {
+                    HandDrawing.UP, HandDrawing.DOWN, HandDrawing.LEFT, HandDrawing.RIGHT -> {
                         finger(left + 2f, top - 54f, 14f, 65f)
                         for (i in 1..3) finger(left + i * 15f, top - 8f, 13f, 26f)
                         finger(left - 10f, top + 14f, 22f, 15f)
+                    }
+                    HandDrawing.INDEX_ONLY, HandDrawing.MIDDLE_ONLY, HandDrawing.INDEX_MIDDLE -> {
+                        for (i in 0..3) {
+                            val extended = (i == 0 && drawing != HandDrawing.MIDDLE_ONLY) ||
+                                (i == 1 && drawing != HandDrawing.INDEX_ONLY)
+                            finger(left + i * 15f, top - if (extended) 54f else 8f, 13f, if (extended) 65f else 26f)
+                        }
+                        finger(left - 10f, top + 14f, 22f, 15f)
+                    }
+                    HandDrawing.CLOSED -> {
+                        for (i in 0..3) finger(left + i * 15f, top - 8f, 14f, 30f)
+                        finger(left - 8f, top + 18f, 30f, 14f)
                     }
                     HandDrawing.THUMB -> {
                         finger(left - 14f, top - 44f, 16f, 63f)
@@ -358,6 +399,8 @@ private fun HandIllustration(drawing: HandDrawing) {
 
 private fun compactGuide(settings: NativeSettings) = if (settings.controlMode == ControlMode.POINTER)
     "Point to aim. Pinch to press, keep pinched to hold, move while pinched to drag, separate to release. Calibrate in Practice before each new external session."
+    else if (settings.poseActions.enabled && (settings.mode == GestureMode.POSE || settings.mode == GestureMode.HYBRID))
+    "Custom pose actions follow your saved profile. Open Gestures for the pose and action list."
     else when (settings.mode) {
     GestureMode.POSE -> "Point down/up to navigate. Open hand: tap video once. Thumbs-up: double tap. Pointing and thumbs-up can repeat."
     GestureMode.HYBRID -> "Point down/up or flick to navigate; move your palm to scroll. Open hand: tap video once. Thumbs-up: double tap."

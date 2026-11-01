@@ -24,7 +24,7 @@ import java.util.Locale
 import kotlin.math.roundToLong
 
 @Composable
-internal fun SettingsPanel(value: NativeSettings, update: (NativeSettings) -> Unit) {
+internal fun SettingsPanel(value: NativeSettings, onPractice: (() -> Unit)? = null, update: (NativeSettings) -> Unit) {
     Text("Control mode", style = MaterialTheme.typography.titleMedium)
     ControlMode.entries.forEach { mode ->
         Row(Modifier.fillMaxWidth().selectable(value.controlMode == mode, role = Role.RadioButton,
@@ -35,9 +35,10 @@ internal fun SettingsPanel(value: NativeSettings, update: (NativeSettings) -> Un
         }
     }
     Text("Pointer uses one hand. Calibrate in Practice before controlling another app.")
-    SettingSwitch("Reverse scroll direction", "Swap which way pointing and hand movement scroll.", value.inverted) {
+    SettingSwitch("Reverse scroll direction", "Reverse legacy pointing, flick and hand movement. Custom pose actions follow their selected direction.", value.inverted) {
         update(value.copy(inverted = it))
     }
+    PoseActionsPanel(value, update, onPractice)
     SettingSwitch("Floating controls", "Show status, Pause and Stop over your feed. Optional permission is needed.", value.overlayEnabled) {
         update(value.copy(overlayEnabled = it))
     }

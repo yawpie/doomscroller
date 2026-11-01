@@ -12,6 +12,12 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class TapDescriptionTest {
+    @Test fun backCannotBeTurnedIntoATouchGesture() {
+        assertThrows(IllegalArgumentException::class.java) {
+            screenGesture(SwipeCoordinates(100f, 200f, 300f, 100), ScrollAction.BACK)
+        }
+    }
+
     @Test fun doubleTapIsTwoStationarySequentialTouchesWithinAndroidTimeout() {
         val coordinates = swipeCoordinates(SwipeConfig(), SwipeBounds(0, 40, 1080, 1800), ScrollRequest(ScrollAction.DOUBLE_TAP))
         val gesture = screenGesture(coordinates, ScrollAction.DOUBLE_TAP)

@@ -24,7 +24,7 @@ internal class SessionRecognition(settings: NativeSettings, area: PointerArea?, 
     private val rotation: Int = 0) {
     val gestures = if (settings.controlMode == ControlMode.SCROLL)
         GestureCoordinator(ContinuousMotionDetector(settings.motion), FlickDetector(settings.flick),
-            HandPoseDetector(settings.pose), settings.mode) else null
+            HandPoseDetector(settings.pose), settings.mode, settings.poseActions) else null
     val pointer = if (settings.controlMode == ControlMode.POINTER) PointerDetector().also { it.calibrate(area) } else null
     fun viewportChanged(currentBounds: SwipeBounds, currentRotation: Int) = bounds != currentBounds || rotation != currentRotation
 
@@ -43,5 +43,7 @@ internal class SessionRecognition(settings: NativeSettings, area: PointerArea?, 
         gestures?.reset()
         return pointer?.cancel(message)
     }
+    fun targetChanged() { gestures?.targetChanged() }
+    fun loseTracking() { gestures?.loseTracking() }
     fun reset(): PointerFeedback? { gestures?.reset(); return pointer?.reset() }
 }

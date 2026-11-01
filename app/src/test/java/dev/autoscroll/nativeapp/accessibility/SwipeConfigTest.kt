@@ -11,6 +11,31 @@ import org.junit.Test
 class SwipeConfigTest {
     private val bounds = SwipeBounds(10, 40, 400, 800)
 
+    @Test fun backCannotBecomeATouchAndTargetMustBeSpecifiedUnambiguously() {
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) { ScrollRequest(ScrollAction.BACK, 1.0) }
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) { ScrollRequest(ScrollAction.BACK, durationMs = 100) }
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) { ScrollRequest(ScrollAction.BACK, expectedTargetPackage = " ") }
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) { ScrollRequest(ScrollAction.BACK, expectedTargetGeneration = 1) }
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) { ScrollRequest(ScrollAction.BACK, expectedTargetPackage = "example.target", expectedTargetGeneration = -1) }
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            swipeCoordinates(SwipeConfig(), bounds, ScrollRequest(ScrollAction.BACK))
+        }
+        assertEquals("example.target", ScrollRequest(ScrollAction.BACK, expectedTargetPackage = "example.target").expectedTargetPackage)
+    }
+
+    @Test fun targetGenerationDistinguishesReturnToSameAppAndIgnoresRepeatedWindowEvents() {
+        val policy = TargetWindowPolicy("own")
+        policy.update("external.a")
+        val first = policy.state
+        policy.update("external.a")
+        assertEquals(first, policy.state)
+        policy.update("external.b")
+        assertTrue(policy.state.generation > first.generation)
+        policy.update("external.a")
+        assertEquals(first.packageName, policy.state.packageName)
+        assertTrue(policy.state.generation > first.generation)
+    }
+
     @Test fun tapsUseContentCenterWithoutMovementOrSwipeDuration() {
         for (action in listOf(ScrollAction.SINGLE_TAP, ScrollAction.DOUBLE_TAP)) {
             val coordinates = swipeCoordinates(SwipeConfig(x = 0.2, durationMs = 1000), bounds, ScrollRequest(action))
