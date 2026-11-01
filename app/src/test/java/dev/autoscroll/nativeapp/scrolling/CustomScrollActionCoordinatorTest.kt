@@ -82,4 +82,41 @@ class CustomScrollActionCoordinatorTest {
         coordinator.invalidate(); runCurrent()
         assertEquals(1, executor.requests.size)
     }
+
+    @Test fun poseLossCancelsUnsubmittedHold() = runTest {
+        val executor = Executor()
+        var now = 1000L
+        val coordinator = ScrollActionCoordinator(executor, this, { now })
+        coordinator.configure(settings = settings(PoseAction.CONTINUOUS_NEXT))
+        coordinator.setSessionActive(true)
+        coordinator.process(decision(now, held = true), now, "target.app", 1)
+        now += 100
+        coordinator.process(GestureDecision(HandMotion(HandAction.STOP), suppressesContinuous = true,
+            customPose = CustomPoseResult(timestampMs = now)), now, "target.app", 1)
+        runCurrent()
+        assertTrue(executor.requests.isEmpty())
+        assertFalse(coordinator.state.value.busy)
+    }
+
+    @Test fun newHoldCannotReviveAnEarlierUnsubmittedHold() = runTest {
+        val executor = Executor()
+        var now = 1000L
+        val coordinator = ScrollActionCoordinator(executor, this, { now })
+        coordinator.configure(settings = settings(PoseAction.CONTINUOUS_NEXT))
+        coordinator.setSessionActive(true)
+        coordinator.process(decision(now, held = true), now, "target.app", 1)
+        now += 100
+        val noHand = GestureDecision(HandMotion(HandAction.STOP), suppressesContinuous = true,
+            customPose = CustomPoseResult(timestampMs = now))
+        coordinator.process(noHand, now, "target.app", 1)
+        now += 100
+        coordinator.process(decision(now, held = true), now, "target.app", 1)
+        runCurrent()
+        assertTrue(executor.requests.isEmpty())
+        assertFalse(coordinator.state.value.busy)
+        now += 100
+        coordinator.process(decision(now, held = true), now, "target.app", 1)
+        runCurrent()
+        assertEquals(1, executor.requests.size)
+    }
 }

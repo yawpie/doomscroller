@@ -33,6 +33,7 @@ class ScrollActionCoordinator(
     private var settings: NativeSettings? = null
     private var lastCustomTimestamp: Long? = null
     private var poseHolding = false
+    private var holdGeneration = 0L
 
     fun setSessionActive(active: Boolean) {
         if (active == state.value.sessionActive) return
@@ -80,7 +81,7 @@ class ScrollActionCoordinator(
                 mutableState.value = state.value.copy(continuousPixelsPerSecond = velocity)
                 return dispatch(ScrollRequest(if (velocity > 0) ScrollAction.FORWARD else ScrollAction.BACKWARD,
                     abs(velocity) * CONTINUOUS_DURATION_MS / 1000.0, CONTINUOUS_DURATION_MS,
-                    expectedTargetPackage, expectedTargetGeneration), nowMs)
+                    expectedTargetPackage, expectedTargetGeneration), nowMs, holdGeneration = holdGeneration)
             }
             if (poseHolding) stopContinuous()
         }
@@ -145,7 +146,7 @@ class ScrollActionCoordinator(
         return timestamp >= sessionStartedAt && timestamp <= current && current - timestamp <= config.staleAfterMs
     }
 
-    private fun dispatch(request: ScrollRequest, timestamp: Long, manual: Boolean = false) {
+    private fun dispatch(request: ScrollRequest, timestamp: Long, manual: Boolean = false, holdGeneration: Long? = null) {
         if (!state.value.sessionActive) return reject("Session is paused or stopped")
         if (!fresh(timestamp)) return reject("Stale gesture or previous session")
         if (operation?.isActive == true) return reject("Screen action already in progress")
@@ -153,6 +154,10 @@ class ScrollActionCoordinator(
         val token = generation
         operation = scope.launch(start = CoroutineStart.LAZY) {
             if (token != generation || !state.value.sessionActive) return@launch
+            if (holdGeneration != null && (!poseHolding || holdGeneration != this@ScrollActionCoordinator.holdGeneration)) {
+                operation = null
+                return@launch
+            }
             if (!fresh(timestamp)) {
                 operation = null
                 reject("Stale gesture before dispatch")
@@ -183,6 +188,7 @@ class ScrollActionCoordinator(
 
     private fun stopContinuous() {
         poseHolding = false
+        holdGeneration++
         velocity = 0.0
         previousMotionTimestamp = null
         mutableState.value = state.value.copy(continuousPixelsPerSecond = 0.0)
