@@ -26,6 +26,7 @@ internal data class PracticeSample(
     val inactiveReason: String? = null,
     val holdActivations: Int = 0,
     val localDetailOpen: Boolean = false,
+    val horizontalPosition: Int = 2,
 )
 
 /** Recognition changes only this local sample. No screen-action executor exists here. */
@@ -135,6 +136,8 @@ internal class PracticeFeedback(private val settings: NativeSettings) {
         val action = when (discrete) {
             PoseAction.NEXT_ITEM -> "Next item"
             PoseAction.PREVIOUS_ITEM -> "Previous item"
+            PoseAction.SCROLL_LEFT -> "Scroll left"
+            PoseAction.SCROLL_RIGHT -> "Scroll right"
             PoseAction.SINGLE_TAP -> "Tap video"
             PoseAction.DOUBLE_TAP -> "Double tap"
             PoseAction.BACK -> if (state.localDetailOpen) "Back to sample list" else "Already at sample root"
@@ -142,6 +145,11 @@ internal class PracticeFeedback(private val settings: NativeSettings) {
                 else if (velocity > 0) "Moving to next item" else if (velocity < 0) "Moving to previous item" else state.lastAction
         }
         state = state.copy(position = (state.position + movement).coerceIn(0.0, 4.0),
+            horizontalPosition = (state.horizontalPosition + when (discrete) {
+                PoseAction.SCROLL_LEFT -> -1
+                PoseAction.SCROLL_RIGHT -> 1
+                else -> 0
+            }).coerceIn(0, 4),
             videoPlaying = if (discrete == PoseAction.SINGLE_TAP) !state.videoPlaying else state.videoPlaying,
             doubleTaps = state.doubleTaps + if (discrete == PoseAction.DOUBLE_TAP) 1 else 0,
             actionCount = state.actionCount + if (discrete != PoseAction.NONE) 1 else 0,

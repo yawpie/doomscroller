@@ -46,6 +46,35 @@ class CustomScrollActionCoordinatorTest {
         assertNull(coordinator.state.value.rejectionReason)
     }
 
+    @Test fun horizontalBindingsKeepTheirDirectionAndGuardsWithReverseEnabled() = runTest {
+        for ((binding, action) in listOf(PoseAction.SCROLL_LEFT to ScrollAction.LEFT,
+            PoseAction.SCROLL_RIGHT to ScrollAction.RIGHT)) {
+            val executor = Executor().apply { pending = CompletableDeferred() }
+            var now = 1000L
+            val coordinator = ScrollActionCoordinator(executor, this, { now })
+            coordinator.configure(inverted = true, settings = settings(binding))
+            coordinator.setSessionActive(true)
+            coordinator.process(decision(now, event = true), now, "target.app", 7)
+            runCurrent()
+            assertEquals(ScrollRequest(action, expectedTargetPackage = "target.app", expectedTargetGeneration = 7),
+                executor.requests.single())
+            now += 100
+            coordinator.process(decision(now, event = true), now, "target.app", 7)
+            runCurrent()
+            executor.pending!!.complete(ScrollExecutionResult.COMPLETED)
+            runCurrent()
+            assertEquals(1, executor.requests.size)
+            now += 500
+            coordinator.process(decision(now - 400, event = true), now - 400)
+            runCurrent()
+            assertEquals(1, executor.requests.size)
+            coordinator.process(decision(now, event = true), now)
+            coordinator.setSessionActive(false)
+            runCurrent()
+            assertEquals(1, executor.requests.size)
+        }
+    }
+
     @Test fun holdHasFinalDirectionAndStopsOnInvalidStaleOrDuplicateSamples() = runTest {
         val executor = Executor()
         var now = 1000L

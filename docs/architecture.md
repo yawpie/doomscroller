@@ -93,6 +93,14 @@ are final; reversal still applies to legacy and movement/flick paths. Binding
 snapshots are immutable, and preference decoding falls back per field. An unsupported
 future version disables custom use while preserving its raw keys on unrelated updates.
 
+Custom horizontal actions are discrete and available to every existing pose.
+Scroll left/right navigates toward content on that side using the opposite finger
+swipe, with constant Y and the saved distance fraction applied to content width.
+Both endpoints move to a clear row when the floating controls intersect the path;
+dispatch is rejected if no candidate row is clear. These actions share the existing
+freshness, target, session and busy guards and ignore direction reversal. Practice
+updates only its independent bounded horizontal page sample.
+
 The coordinator owns one operation and drops busy samples. Held pose scrolling
 uses 100ms segments and a provisional shared 300 px/s speed. A watchdog polled at
 250ms invalidates held output and recognition evidence after the lesser of the

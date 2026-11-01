@@ -46,3 +46,25 @@ they are not committed. Physical hand accuracy, real target-app behavior, hold s
 latency, touch threshold at 300 px/s, thermal/battery and OEM/API coverage must be
 recorded separately using the [physical matrix](device-validation.md). The
 provisional speed is not a measured acceptance threshold.
+
+## Horizontal pose actions (1 November 2026)
+
+Added `SCROLL_LEFT` and `SCROLL_RIGHT` as discrete actions for every existing pose.
+They preserve saved defaults and use the existing string-ID preference format.
+Direction refers to content navigation, so the finger swipes in the opposite
+direction. Saved swipe distance applies to content width; duration stays shared
+with vertical swipes. Horizontal overlay avoidance selects a clear row or rejects
+dispatch. Practice updates an independent local five-page indicator.
+
+The JVM suites pass 177 tests with zero failures, errors or skips, including
+horizontal coordinates/distance, overlay avoidance, custom direction with Reverse
+enabled, busy/stale/pause guards and local recognition/release/edge behavior.
+Legacy parity fixtures remain unchanged. Instrumentation cases now cover horizontal
+Android paths, both picker choices, draft recreation/Apply and preference round-trip.
+The full development gate passed: `:gesture:test :app:testDebugUnitTest
+:app:lintDebug :app:assembleDebug :app:assembleRelease :app:assembleDebugAndroidTest`.
+Debug lint reports zero errors and 30 warnings. `git diff --check` also passes.
+Those instrumented cases have not been executed for this change. Visual checks for
+large text, themes, rotation and permission flows, real-hand recognition and actual
+horizontal target-app response remain unverified; earlier emulator evidence above
+does not validate this extension. No connected physical-device permissions were changed.

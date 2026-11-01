@@ -133,6 +133,8 @@ class ScrollActionCoordinator(
     private fun screenAction(action: PoseAction): ScrollAction? = when (action) {
         PoseAction.NEXT_ITEM -> ScrollAction.FORWARD
         PoseAction.PREVIOUS_ITEM -> ScrollAction.BACKWARD
+        PoseAction.SCROLL_LEFT -> ScrollAction.LEFT
+        PoseAction.SCROLL_RIGHT -> ScrollAction.RIGHT
         PoseAction.SINGLE_TAP -> ScrollAction.SINGLE_TAP
         PoseAction.DOUBLE_TAP -> ScrollAction.DOUBLE_TAP
         PoseAction.BACK -> ScrollAction.BACK

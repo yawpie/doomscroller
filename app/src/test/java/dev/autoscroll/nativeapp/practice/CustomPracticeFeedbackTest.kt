@@ -78,6 +78,26 @@ class CustomPracticeFeedbackTest {
         assertEquals(0.0, f.state.velocity, 0.0)
     }
 
+    @Test fun horizontalPosesMoveOnlyLocalPagesOncePerAppearanceAndClampAtEdges() {
+        for ((binding, direction) in listOf(PoseAction.SCROLL_LEFT to -1, PoseAction.SCROLL_RIGHT to 1)) {
+            val f = feedback(binding, inverted = true)
+            for (t in 0L..800L step 100) f.process(sample(t, setOf(5)))
+            assertEquals(2 + direction, f.state.horizontalPosition)
+            assertEquals(1, f.state.actionCount)
+            assertEquals(2.0, f.state.position, 0.0)
+            assertEquals(if (direction < 0) "Scroll left" else "Scroll right", f.state.lastAction)
+            for (cycle in 1L..4L) {
+                val start = cycle * 1000
+                for (t in start..start + 200 step 100) f.process(sample(t, emptySet()))
+                for (t in start + 300..start + 800 step 100) f.process(sample(t, setOf(5)))
+            }
+            assertEquals(if (direction < 0) 0 else 4, f.state.horizontalPosition)
+            assertEquals(5, f.state.actionCount)
+            assertTrue(f.state.videoPlaying)
+            assertEquals(0, f.state.doubleTaps)
+        }
+    }
+
     @Test fun heldDistanceUsesElapsedTimeAtDifferentSampleRates() {
         val fast = feedback(PoseAction.CONTINUOUS_NEXT)
         val slow = feedback(PoseAction.CONTINUOUS_NEXT)

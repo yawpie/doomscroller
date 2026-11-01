@@ -54,6 +54,15 @@ class PoseActionsPanelTest {
                 assertEquals(PoseAction.NEXT_ITEM, state.value.poseActions.bindings[PoseId.MIDDLE_ONLY])
                 assertEquals(PoseAction.CONTINUOUS_PREVIOUS, state.value.poseActions.bindings[PoseId.INDEX_MIDDLE])
             }
+            click("Index finger only: Back")
+            click("Scroll left once")
+            click("Middle finger only: Scroll next once")
+            click("Scroll right once")
+            instrumentation.runOnMainSync {
+                assertEquals(PoseAction.SCROLL_LEFT, state.value.poseActions.bindings[PoseId.INDEX_ONLY])
+                assertEquals(PoseAction.SCROLL_RIGHT, state.value.poseActions.bindings[PoseId.MIDDLE_ONLY])
+                assertEquals(PoseAction.CONTINUOUS_PREVIOUS, state.value.poseActions.bindings[PoseId.INDEX_MIDDLE])
+            }
             click("Reset pose actions")
             instrumentation.runOnMainSync {
                 assertEquals(PoseActions(), state.value.poseActions)
@@ -74,14 +83,14 @@ class PoseActionsPanelTest {
                 click("Use custom pose actions")
                 click("Finger combinations")
                 click("Index and middle fingers: No action")
-                click("Back")
+                click("Scroll right once")
                 assertEquals(baseline, app.settings.state.value)
                 scenario.recreate()
-                click("Index and middle fingers: Back")
+                click("Index and middle fingers: Scroll right once")
                 click("Cancel")
                 assertEquals(baseline, app.settings.state.value)
                 click("Apply changes")
-                assertEquals(PoseAction.BACK, app.settings.state.value.poseActions.bindings[PoseId.INDEX_MIDDLE])
+                assertEquals(PoseAction.SCROLL_RIGHT, app.settings.state.value.poseActions.bindings[PoseId.INDEX_MIDDLE])
                 assertEquals(PoseRecognitionProfile.FINGER_COMBINATIONS, app.settings.state.value.poseActions.profile)
                 click("Gestures")
                 reveal("Custom pose actions · Finger combinations")
