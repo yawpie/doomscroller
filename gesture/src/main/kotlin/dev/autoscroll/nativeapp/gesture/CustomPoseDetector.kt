@@ -3,7 +3,7 @@ package dev.autoscroll.nativeapp.gesture
 import kotlin.math.min
 
 class CustomPoseDetector(private val actions: PoseActions, private val config: HandPoseDetectionConfig) {
-    private val classifier = CustomPoseClassifier(config)
+    private val classifier = HandPoseClassifier(config)
     private var lastTime: Long? = null
     private var candidate: PoseId? = null
     private var candidateStart = 0L

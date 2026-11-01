@@ -35,7 +35,7 @@ class CustomPoseTest {
     }
 
     @Test fun exactFingerStatesAndProfilesHaveOneCanonicalResult() {
-        val classifier = CustomPoseClassifier(config)
+        val classifier = HandPoseClassifier(config)
         fun classify(open: Set<Int>, thumb: Boolean = false, profile: PoseRecognitionProfile = combinations) =
             classifier.classify(points(open, thumb), 1.0, profile)
         assertEquals(PoseId.INDEX_ONLY, classify(setOf(5)))
@@ -58,7 +58,7 @@ class CustomPoseTest {
     }
 
     @Test fun aspectMirrorSectorsAndAmbiguityAreHandled() {
-        val classifier = CustomPoseClassifier(config)
+        val classifier = HandPoseClassifier(config)
         for ((angle, expected) in listOf(0.0 to PoseId.POINTING_UP, PI / 2 to PoseId.POINTING_RIGHT,
             PI to PoseId.POINTING_DOWN, -PI / 2 to PoseId.POINTING_LEFT)) {
             for (aspect in listOf(0.75, 1.0, 1.5)) for (mirror in listOf(false, true)) {
@@ -85,6 +85,15 @@ class CustomPoseTest {
         val half = points(setOf(5)).toMutableList()
         half[7] = half[7].copy(x = half[7].x + 0.04, y = half[6].y - 0.04)
         assertNull(classifier.classify(half, 1.0, combinations))
+    }
+
+    @Test fun canonicalClassifierRejectsInvalidGeometryThresholds() {
+        for (invalid in listOf(config.copy(minimumIndexAngle = Double.NaN),
+            config.copy(exitCurledAngle = config.exitIndexAngle),
+            config.copy(exitVerticalAlignment = config.minimumVerticalAlignment + 0.01),
+            config.copy(minimumBoneLengthRatio = config.minimumFingerLengthRatio))) {
+            assertThrows(IllegalArgumentException::class.java) { HandPoseClassifier(invalid) }
+        }
     }
 
     @Test fun discreteLatchSurvivesUnknownAndRequiresTimedValidRelease() {
