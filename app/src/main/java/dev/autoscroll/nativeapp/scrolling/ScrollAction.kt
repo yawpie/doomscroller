@@ -1,7 +1,7 @@
 package dev.autoscroll.nativeapp.scrolling
 
 enum class ScrollAction {
-    FORWARD, BACKWARD, SINGLE_TAP, DOUBLE_TAP;
+    FORWARD, BACKWARD, SINGLE_TAP, DOUBLE_TAP, BACK;
 
     val isTap: Boolean get() = this == SINGLE_TAP || this == DOUBLE_TAP
 }
@@ -10,16 +10,20 @@ data class ScrollRequest(
     val action: ScrollAction,
     val distancePixels: Double? = null,
     val durationMs: Long? = null,
+    val expectedTargetPackage: String? = null,
+    val expectedTargetGeneration: Long? = null,
 ) {
     init {
         require(distancePixels == null || distancePixels.isFinite() && distancePixels > 0)
         require(durationMs == null || durationMs in 1..60_000)
-        require(!action.isTap || (distancePixels == null && durationMs == null))
+        require((!action.isTap && action != ScrollAction.BACK) || (distancePixels == null && durationMs == null))
+        require(expectedTargetPackage == null || expectedTargetPackage.isNotBlank())
+        require(expectedTargetGeneration == null || (expectedTargetPackage != null && expectedTargetGeneration >= 0))
     }
 }
 
 enum class ScrollExecutionResult {
-    COMPLETED, CANCELLED, REJECTED, UNAVAILABLE, BUSY,
+    COMPLETED, ACCEPTED, CANCELLED, REJECTED, UNAVAILABLE, BUSY,
     TARGET_BLOCKED, SCREEN_LOCKED, USER_INTERACTION,
 }
 

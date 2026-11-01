@@ -159,7 +159,7 @@ internal fun HandScrollScreen(
                             }
                             SetupStep("2 · Accessibility", accessibility && consent && (!pointerMode || pointerConsent),
                                 if (pointerMode) "Pointer touches use the cursor location: press, hold, drag and release. Screen content, typed text and passwords are not read."
-                                else "Sends the swipes and taps you request. Screen content, typed text and passwords are not read.") {
+                                else "Sends the swipes, taps and mapped Back actions you request. Screen content, typed text and passwords are not read.") {
                                 if (!accessibility || !consent || pointerMode && !pointerConsent) Text("Read and agree to the disclosure, then enable Scroll Vision gestures in Android Settings. If Android restricts access, open App info and review its restricted settings option.")
                                 OutlinedButton(onClick = { disclosure = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                                     Text(if (accessibility && consent && (!pointerMode || pointerConsent)) "Review access" else "Review and enable accessibility")
@@ -276,7 +276,7 @@ internal fun HandScrollScreen(
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text(if (pointerMode) "Scroll Vision uses Android Accessibility to send a touch at the pointer cursor: pinch to press, keep pinched to hold, move while pinched to drag, and separate to release. A short press becomes a tap. Other apps decide how these touches behave. It receives only the current app's package name to block unsafe targets; it does not read screen content, text or passwords. Touches may interrupt manual input. Pause, Stop, tracking loss, lock or an app change requests release; an already submitted segment may finish first. Releasing a short touch can still activate its target, and a long-press action cannot always be undone. If release cannot be confirmed, new actions stop: touch the screen manually, acknowledge recovery in Home, then recalibrate and explicitly Start. Camera images stay on your device. You can pause, stop or disable the service in Android Settings at any time."
-                    else "Scroll Vision uses Android Accessibility to send vertical swipes, center single taps, and center double taps requested by your hand gestures or external test buttons in other apps. It receives only the current app's package name to block unsafe targets. It does not read screen content, text, or passwords. Actions may interrupt an ongoing touch. You can pause, stop, or disable the service in Android Settings at any time.")
+                    else "Scroll Vision uses Android Accessibility to send vertical swipes, center taps and mapped Android Back actions requested by your hand gestures in other apps. Continuous pose actions send short swipes while the pose is held. External test buttons send individual swipes or taps. It receives only the current app's package name to block unsafe targets. It does not read screen content, text, or passwords. Actions may interrupt an ongoing touch. You can pause, stop, or disable the service in Android Settings at any time.")
             }
         },
         confirmButton = { TextButton(onClick = { disclosure = false; if (pointerMode) onPointerConsent() else onAccessibilityConsent() },

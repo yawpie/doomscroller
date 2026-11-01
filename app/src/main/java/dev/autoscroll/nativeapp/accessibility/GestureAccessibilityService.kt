@@ -39,17 +39,18 @@ class GestureAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
-        target = TargetWindowPolicy(packageName)
+        target = TargetWindowPolicy(packageName, ++targetGeneration)
         connectedService = this
         mutableTargetReadiness.value = false
-        mutableTarget.value = TargetWindowState()
+        mutableTarget.value = target.state
         mutableReadiness.value = true
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (::target.isInitialized && event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+        if (connectedService === this && ::target.isInitialized && event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             val previous = target.state
             target.update(event.packageName?.toString())
+            targetGeneration = target.state.generation
             if (previous != target.state) pointer.end(ScrollExecutionResult.TARGET_BLOCKED)
             mutableTargetReadiness.value = target.allowed
             mutableTarget.value = target.state
@@ -74,11 +75,21 @@ class GestureAccessibilityService : AccessibilityService() {
         check(Looper.myLooper() == Looper.getMainLooper())
         if (connectedService !== this) return ScrollExecutionResult.UNAVAILABLE
         if (inFlight != null || pointerDispatchBusy) return ScrollExecutionResult.BUSY
-        if (!::target.isInitialized || !target.allowed) return ScrollExecutionResult.TARGET_BLOCKED
+        if (!::target.isInitialized || !target.allowed ||
+            (request.expectedTargetPackage != null && target.state.packageName != request.expectedTargetPackage) ||
+            (request.expectedTargetGeneration != null && target.state.generation != request.expectedTargetGeneration))
+            return ScrollExecutionResult.TARGET_BLOCKED
         if (getSystemService(KeyguardManager::class.java).isKeyguardLocked ||
             !getSystemService(PowerManager::class.java).isInteractive
         ) return ScrollExecutionResult.SCREEN_LOCKED
         if (SystemClock.elapsedRealtime() < interactionBlockedUntil) return ScrollExecutionResult.USER_INTERACTION
+        if (request.action == ScrollAction.BACK) return try {
+            if (performGlobalAction(GLOBAL_ACTION_BACK)) ScrollExecutionResult.ACCEPTED else ScrollExecutionResult.REJECTED
+        } catch (_: SecurityException) {
+            ScrollExecutionResult.UNAVAILABLE
+        } catch (_: IllegalStateException) {
+            ScrollExecutionResult.REJECTED
+        }
         val bounds = contentBounds()
         val overlay = overlayBounds?.takeIf { it.width() > 0 && it.height() > 0 }?.let {
             SwipeBounds(it.left, it.top, it.width(), it.height())
@@ -123,7 +134,7 @@ class GestureAccessibilityService : AccessibilityService() {
             connectedService = null
             mutableReadiness.value = false
             mutableTargetReadiness.value = false
-            mutableTarget.value = TargetWindowState()
+            mutableTarget.value = TargetWindowState(generation = ++targetGeneration)
         }
         inFlight?.let { finish(it, ScrollExecutionResult.UNAVAILABLE) }
     }
@@ -231,6 +242,7 @@ class GestureAccessibilityService : AccessibilityService() {
         private val mutableTargetReadiness = MutableStateFlow(false)
         internal val targetReadiness: StateFlow<Boolean> = mutableTargetReadiness.asStateFlow()
         private val mutableTarget = MutableStateFlow(TargetWindowState())
+        private var targetGeneration = 0L
         internal val targetState = mutableTarget.asStateFlow()
         internal var connectedService: GestureAccessibilityService? = null
             private set
@@ -246,6 +258,7 @@ class GestureAccessibilityService : AccessibilityService() {
 }
 
 internal fun screenGesture(coordinates: SwipeCoordinates, action: ScrollAction): GestureDescription {
+    require(action != ScrollAction.BACK)
     val path = Path().apply {
         moveTo(coordinates.x, coordinates.startY)
         if (!action.isTap) lineTo(coordinates.x, coordinates.endY)
