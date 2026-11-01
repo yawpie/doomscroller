@@ -13,7 +13,7 @@ wrapper and pinned dependencies, not a system Gradle installation.
 | MediaPipe and metrics | `app/src/main/java/.../mediapipe` | One worker owns model lifetime; adapt results into domain landmarks. |
 | Session state and lifecycle | `app/src/main/java/.../session` | Service owns resources; SessionStore publishes immutable StateFlows; generation tokens reject stale work. |
 | Android entry point and permissions | `MainActivity.kt` | Collect state with lifecycle awareness; own permission launchers and Android intents. |
-| Screen rendering | `presentation/HandScrollScreen.kt`, `SettingsPanel.kt`, `PracticeScreen.kt` | Receive immutable data and callbacks; keep persistence, services and permissions outside composables. |
+| Screen rendering | `presentation/HandScrollScreen.kt`, `SettingsPanel.kt`, `PoseActionsPanel.kt`, `PracticeScreen.kt` | Receive immutable data and callbacks; keep persistence, services and permissions outside composables. |
 | Local practice | `practice/PracticeController.kt`, `PracticeFeedback.kt` | Activity owns the bounded camera; reuse saved recognition settings, update only a local sample, never construct dispatch adapters. |
 | Settings | `settings/NativeSettings.kt`, `SettingsStore.kt` | Store validated immutable snapshots; preserve preference names and defaults. |
 | Action arbitration | `scrolling` | One in-flight operation, no backlog; freshness, session and inversion checks stay centralized. |
@@ -95,3 +95,14 @@ before any new DOWN or MOVE. Do not send stationary continuation heartbeats or
 replacement taps. Keep one active segment and one replaceable pending point.
 Review [pointer validation](pointer-validation.md) for executed test evidence and
 the physical camera, real-app and performance acceptance still outstanding.
+
+## Custom pose review
+
+Keep profile ownership, immutable bindings and trigger policy in `:gesture`, and
+use `PoseActionResolver` for Practice and the external Scroll coordinator. Exercise
+custom-off parity, three independent finger bindings, common poses, preference
+corruption/future versions, final direction and HYBRID NONE. Back and held segments
+share target generation, freshness and dispatch guards. Do not infer a successful
+navigation from Back ACCEPTED or a swipe callback. Preserve failures and distinguish
+unit tests, compiled APKs, emulator execution and physical acceptance in the
+[custom pose receipt](custom-pose-actions-validation.md).
