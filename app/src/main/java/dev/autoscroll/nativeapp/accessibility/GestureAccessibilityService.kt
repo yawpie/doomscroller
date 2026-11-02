@@ -261,7 +261,7 @@ internal fun screenGesture(coordinates: SwipeCoordinates, action: ScrollAction):
     require(action != ScrollAction.BACK)
     val path = Path().apply {
         moveTo(coordinates.x, coordinates.startY)
-        if (!action.isTap) lineTo(coordinates.x, coordinates.endY)
+        if (!action.isTap) lineTo(coordinates.endX, coordinates.endY)
     }
     val builder = GestureDescription.Builder().addStroke(
         GestureDescription.StrokeDescription(path, 0, coordinates.durationMs))

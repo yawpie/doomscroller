@@ -11,14 +11,16 @@ Run from the repository root:
 .\gradlew.bat :gesture:test :app:testDebugUnitTest
 ```
 
-Gradle passes an explicit fixture path to both suites. Recognition and action
-mapping compare exact events, directions, counts, timestamps, ownership and
-suppression; floating intermediates allow absolute error `1e-9`. Inputs include
-all 21 indexed landmarks, missing/invalid hands, configuration changes, jitter,
-motion/flick/pose confirmation, cooldown, gaps, rearming and inversion.
-
-These historical fixtures disable the native tap extension. Separate
-`TapGestureTest` cases protect current timed rearm, pointing, open-hand single
-tap and thumbs-up double tap behavior. Do not regenerate expectations to hide
-regressions; review intentional behavior changes and add explicit native tests.
-Physical camera/feed behavior needs device QA.
+Gradle passes an explicit fixture path to both suites. The 26 cases with no
+legacy pose event and no non-READY legacy pose phase retain motion, flick,
+ownership, suppression and action projections, with absolute tolerance `1e-9`.
+Recognition replay assigns NONE to every pose to isolate those motion/flick
+projections from the newly active open-hand preset; this does not test preset
+pose ownership.
+The POSE neutral case remains in this set to check mode suppression. The other
+13 pose-owning cases and all legacy pose identity, phase, timing, confirmation,
+cooldown and rearm assertions are retired because the canonical geometry and
+once-per-appearance policy intentionally differ. Historical expected data stays
+unchanged. Native classifier, detector, practice and session tests cover the new
+contract; do not regenerate the fixture to conceal regressions. Physical
+camera/feed behavior requires device QA.

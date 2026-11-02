@@ -17,20 +17,28 @@ class GoldenParityTest(private val id: String, private val fixture: JSONObject) 
             val file = File(requireNotNull(System.getProperty("parityFixtures")))
             val cases = JSONObject(file.readText()).getJSONArray("cases")
             require(cases.length() >= 24)
-            return (0 until cases.length()).map {
-                val fixture = cases.getJSONObject(it)
+            val selected = (0 until cases.length()).map { cases.getJSONObject(it) }.filter { fixture ->
+                val expected = fixture.getJSONArray("expected")
+                (0 until expected.length()).all { i ->
+                    val sample = expected.getJSONObject(i)
+                    sample.isNull("pose") && (sample.isNull("posePhase") || sample.getString("posePhase") == "READY")
+                }
+            }
+            require(selected.size == 26)
+            return selected.map { fixture ->
                 arrayOf(fixture.getString("caseId"), fixture)
             }
         }
     }
 
-    @Test fun existingDartOutputMatchesKotlin() {
+    @Test fun unaffectedMotionAndFlickProjectionMatchesDart() {
         val config = fixture.getJSONObject("config")
         val motion = ContinuousMotionDetector(readMotionConfig(config.getJSONObject("motion")))
         val flick = FlickDetector(readFlickConfig(config.getJSONObject("flick")))
         var poseConfig = config.getJSONObject("pose")
-        val coordinator = GestureCoordinator(motion, flick, HandPoseDetector(readPoseConfig(poseConfig)),
-            GestureMode.valueOf(config.getString("mode")))
+        val coordinator = GestureCoordinator(motion, flick, readPoseConfig(poseConfig),
+            GestureMode.valueOf(config.getString("mode")),
+            PoseActions(enabled = true, bindings = PoseId.entries.associateWith { PoseAction.NONE }))
         val samples = fixture.getJSONArray("samples")
         val expected = fixture.getJSONArray("expected")
         assertEquals(samples.length(), expected.length())
@@ -40,14 +48,14 @@ class GoldenParityTest(private val id: String, private val fixture: JSONObject) 
             if (change != null) {
                 poseConfig = JSONObject(poseConfig.toString())
                 change.keySet().forEach { poseConfig.put(it, change.get(it)) }
-                coordinator.configure(HandPoseDetector(readPoseConfig(poseConfig)),
+                coordinator.configure(readPoseConfig(poseConfig),
                     GestureMode.valueOf(change.getString("mode")))
             }
             val points = sample.optJSONArray("landmarks")?.let(::readLandmarks)
             val wanted = expected.getJSONObject(index)
             val hand: HandPose? = try { points?.let { HandPose(it) } } catch (_: IllegalArgumentException) {
                 assertTrue("$id sample $index must reject invalid landmarks", wanted.getBoolean("rejected"))
-                assertEquals(wanted.getString("classification"), HandPoseClassifier(readPoseConfig(poseConfig)).classify(points!!).name)
+                assertNull(HandPoseClassifier(readPoseConfig(poseConfig)).classify(points!!, 1.0, PoseRecognitionProfile.DIRECTION))
                 continue
             }
             assertFalse("$id sample $index must accept valid landmarks", wanted.getBoolean("rejected"))
@@ -61,17 +69,12 @@ class GoldenParityTest(private val id: String, private val fixture: JSONObject) 
                 "flick" to decision.flick?.let { json("direction" to it.direction.name, "timestampMs" to it.timestampMs,
                     "verticalDisplacement" to it.verticalDisplacement, "verticalVelocity" to it.verticalVelocity,
                     "durationMs" to it.durationMs) },
-                "pose" to decision.pose?.let { json("pose" to it.pose.name, "timestampMs" to it.timestampMs) },
-                "posePhase" to coordinator.poseDetector.phase.name,
-                "currentPose" to coordinator.poseDetector.currentPose.name,
-                "confirmationProgress" to coordinator.poseDetector.confirmationProgress,
-                "cooldownRemainingMs" to coordinator.poseDetector.cooldownRemainingMs,
                 "flickOwnsGesture" to flick.ownsGesture,
                 "flickSuppressesContinuous" to flick.suppressesContinuous,
                 "suppressesContinuous" to decision.suppressesContinuous,
             )
             for (key in actual.keySet()) compare("$id sample $index $key", wanted.get(key), actual.get(key))
-            val actionable = listOf(decision.pose != null, decision.flick != null,
+            val actionable = listOf(decision.poseResult?.event != null, decision.flick != null,
                 decision.motion.action == HandAction.MOVE_UP || decision.motion.action == HandAction.MOVE_DOWN).count { it }
             assertTrue("$id sample $index emits at most one action", actionable <= 1)
         }
@@ -120,7 +123,6 @@ private fun readFlickConfig(c: JSONObject) = FlickDetectionConfig(
 private fun readPoseConfig(c: JSONObject) = HandPoseDetectionConfig(
     enabled = c.getBoolean("enabled"), confirmationDurationMs = c.getLong("confirmationDurationMs"),
     releaseDurationMs = c.getLong("releaseDurationMs"), cooldownMs = c.getLong("cooldownMs"),
-    rearmMode = HandPoseRearmMode.valueOf(c.getString("rearmMode")), stablePoseDurationMs = c.getLong("stablePoseDurationMs"),
     minimumObservations = c.getInt("minimumObservations"), minimumIndexAngle = c.getDouble("minimumIndexAngle"),
     maximumCurledAngle = c.getDouble("maximumCurledAngle"), minimumVerticalAlignment = c.getDouble("minimumVerticalAlignment"),
     exitIndexAngle = c.getDouble("exitIndexAngle"), exitCurledAngle = c.getDouble("exitCurledAngle"),

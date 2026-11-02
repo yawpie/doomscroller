@@ -40,9 +40,9 @@ class PoseActionsPanelTest {
                     PoseActionsPanel(state.value, { state.value = it }, null)
                 }
             } } }
-            reveal("Index finger only: No action")
+            reveal("Index finger only (point up): No action")
             capture("pose-actions-editor.png")
-            click("Index finger only: No action")
+            click("Index finger only (point up): No action")
             capture("pose-actions-picker.png")
             click("Back")
             click("Middle finger only: No action")
@@ -52,6 +52,15 @@ class PoseActionsPanelTest {
             instrumentation.runOnMainSync {
                 assertEquals(PoseAction.BACK, state.value.poseActions.bindings[PoseId.INDEX_ONLY])
                 assertEquals(PoseAction.NEXT_ITEM, state.value.poseActions.bindings[PoseId.MIDDLE_ONLY])
+                assertEquals(PoseAction.CONTINUOUS_PREVIOUS, state.value.poseActions.bindings[PoseId.INDEX_MIDDLE])
+            }
+            click("Index finger only (point up): Back")
+            click("Scroll left once")
+            click("Middle finger only: Scroll next once")
+            click("Scroll right once")
+            instrumentation.runOnMainSync {
+                assertEquals(PoseAction.SCROLL_LEFT, state.value.poseActions.bindings[PoseId.INDEX_ONLY])
+                assertEquals(PoseAction.SCROLL_RIGHT, state.value.poseActions.bindings[PoseId.MIDDLE_ONLY])
                 assertEquals(PoseAction.CONTINUOUS_PREVIOUS, state.value.poseActions.bindings[PoseId.INDEX_MIDDLE])
             }
             click("Reset pose actions")
@@ -74,14 +83,14 @@ class PoseActionsPanelTest {
                 click("Use custom pose actions")
                 click("Finger combinations")
                 click("Index and middle fingers: No action")
-                click("Back")
+                click("Scroll right once")
                 assertEquals(baseline, app.settings.state.value)
                 scenario.recreate()
-                click("Index and middle fingers: Back")
+                click("Index and middle fingers: Scroll right once")
                 click("Cancel")
                 assertEquals(baseline, app.settings.state.value)
                 click("Apply changes")
-                assertEquals(PoseAction.BACK, app.settings.state.value.poseActions.bindings[PoseId.INDEX_MIDDLE])
+                assertEquals(PoseAction.SCROLL_RIGHT, app.settings.state.value.poseActions.bindings[PoseId.INDEX_MIDDLE])
                 assertEquals(PoseRecognitionProfile.FINGER_COMBINATIONS, app.settings.state.value.poseActions.profile)
                 click("Gestures")
                 reveal("Custom pose actions · Finger combinations")
@@ -131,17 +140,24 @@ class PoseActionsPanelTest {
         for (index in 0 until node.childCount) scrollable(node.getChild(index))?.let { return it }
         return null
     }
-    private fun reveal(text: String) {
+    private fun reveal(text: String, click: Boolean = false) {
+        fun match(): Boolean {
+            var node = find(text) ?: return false
+            if (!node.isVisibleToUser) return false
+            if (!click) return true
+            while (!node.isClickable) node = node.parent ?: return false
+            return node.refresh() && node.isVisibleToUser && node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+        }
         waitUntil(text) { root() != null }
-        if (find(text)?.isVisibleToUser == true) return
+        if (match()) return
         for (step in 0 until 32) {
-            if (find(text)?.isVisibleToUser == true) return
+            if (match()) return
             val moved = scrollable(root())?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD) == true
             automation.waitForIdle(50, 1000)
             if (!moved) break
         }
         waitUntil(text) {
-            if (find(text)?.isVisibleToUser == true) true
+            if (match()) true
             else {
                 scrollable(root())?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
                 automation.waitForIdle(50, 1000)
@@ -150,12 +166,7 @@ class PoseActionsPanelTest {
         }
     }
     private fun click(text: String) {
-        reveal(text)
-        waitUntil(text) {
-            var node = find(text)
-            while (node != null && !node.isClickable) node = node.parent
-            node?.let { it.refresh() && it.performAction(AccessibilityNodeInfo.ACTION_CLICK) } == true
-        }
+        reveal(text, click = true)
         instrumentation.waitForIdleSync()
     }
     private fun waitUntil(label: String, condition: () -> Boolean) {

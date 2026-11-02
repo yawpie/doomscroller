@@ -1,7 +1,7 @@
 package dev.autoscroll.nativeapp.scrolling
 
 enum class ScrollAction {
-    FORWARD, BACKWARD, SINGLE_TAP, DOUBLE_TAP, BACK;
+    FORWARD, BACKWARD, SINGLE_TAP, DOUBLE_TAP, BACK, LEFT, RIGHT;
 
     val isTap: Boolean get() = this == SINGLE_TAP || this == DOUBLE_TAP
 }

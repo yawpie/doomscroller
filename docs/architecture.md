@@ -81,17 +81,35 @@ Each ImageProxy closes once in finally. Initialization, inference, and disposal 
 
 ## Gesture arbitration and external actions
 
-With custom pose actions off, HYBRID and POSE include the native tap extension; CONTINUOUS and FLICK isolate their movement detectors. Pose/flick candidate, latch and cooldown ownership suppress competitors. Suppression resets continuous history. Native pose rearming uses elapsed time only, with a 200–3000ms Settings slider (default 450ms). After the interval, fresh confirmation permits another action, including held pointing/thumbs-up poses and direct up/down changes. Open hand (`NEUTRAL`) sends one pause tap per presentation and suppresses movement while held; its tap debounce survives tracking loss and clears on a recognized non-open pose. It never releases the timer. A vertically extended thumb with the other four fingers curled sends a double tap. Tracking loss discards candidates, while valid monotonic timestamps can expire the timer without a hand. The original open-hand/stable-pose rearm remains available with `tapGesturesEnabled=false` for the unchanged Dart compatibility fixtures.
+POSE and HYBRID use one canonical classifier and detector for both the default
+preset and custom bindings. With custom actions off, a snapshot selects the
+built-in direction profile and common pose bindings without changing saved custom
+settings. An open hand requires five extended fingers; pointing requires the
+thumb and remaining fingers folded. In the finger-combinations profile, index only
+also requires an upward orientation; middle only and index-middle remain independent.
+Joint angles use the landmarks' approximate depth as well as aspect-corrected screen
+coordinates; direction, distance checks and minimum visible bone lengths remain in
+the screen plane. Depth is estimated, so real-hand accuracy still needs device validation.
+A confirmed discrete action runs once per
+appearance. Loss alone cannot rearm it: another valid pose must satisfy the release
+duration and observation count, and cooldown must also expire. NONE does not claim
+HYBRID ownership; existing flick ownership takes priority and suppression resets
+motion history. CONTINUOUS and FLICK isolate their movement detectors.
 
-In the legacy path, down pose/flick -> forward; up -> backward; inversion applies once and does not affect taps. Continuous motion uses the same velocity/sensitivity/EMA mapping, rendered as bounded 100ms proportional touchscreen strokes. This is an intentional adapter difference from Flutter's per-frame ListView ticker: small strokes can be below another app's touch threshold. Taps use the content center and 50ms stationary strokes; double tap is two sequential strokes in one dispatch, separated by up to 100ms within Android's double-tap timeout. No delayed backlog of actions is retained. Busy, stale, inactive, disconnected, locked, system and own-app targets reject all output, including taps. The overlay's actual bounds are excluded from the gesture path; center taps use a clear column if the widget occupies the center.
+Preset pointing and flick invert once when configured; custom directions are final.
+Continuous motion uses velocity/sensitivity/EMA mapping in bounded 100ms strokes.
+Taps use the content center; double taps are sequential strokes in one dispatch.
+Busy, stale, inactive, disconnected, locked, system and own-app targets reject
+output, and overlay bounds are excluded. Binding snapshots are immutable; future
+preference versions preserve raw keys on unrelated updates.
 
-With custom actions enabled in Scroll POSE/HYBRID, the recognition snapshot
-selects one exclusive direction/finger profile and shared open, closed and thumbs-up
-poses. The resolver maps confirmed poses to discrete actions or a held direction;
-NONE does not claim HYBRID motion/flick ownership. Chosen custom scroll directions
-are final; reversal still applies to legacy and movement/flick paths. Binding
-snapshots are immutable, and preference decoding falls back per field. An unsupported
-future version disables custom use while preserving its raw keys on unrelated updates.
+Custom horizontal actions are discrete and available to every existing pose.
+Scroll left/right navigates toward content on that side using the opposite finger
+swipe, with constant Y and the saved distance fraction applied to content width.
+Both endpoints move to a clear row when the floating controls intersect the path;
+dispatch is rejected if no candidate row is clear. These actions share the existing
+freshness, target, session and busy guards and ignore direction reversal. Practice
+updates only its independent bounded horizontal page sample.
 
 The coordinator owns one operation and drops busy samples. Held pose scrolling
 uses 100ms segments and a provisional shared 300 px/s speed. A watchdog polled at

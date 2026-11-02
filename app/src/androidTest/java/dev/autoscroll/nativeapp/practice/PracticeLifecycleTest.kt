@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.graphics.Rect
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.os.Build
 import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
@@ -169,16 +170,14 @@ class PracticeLifecycleTest {
 
     private fun click(text: String) {
         reveal(text, AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD, clickable = true)
-        // Compose can replace virtual nodes after a scroll or camera recomposition.
-        automation.waitForIdle(300, 5_000)
-        waitUntil {
-            val node = find(automation.rootInActiveWindow, text, clickable = true)
-            node != null && visible(node) && node.refresh() && node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-        }
         instrumentation.waitForIdleSync()
     }
 
-    private fun textExists(text: String) = find(automation.rootInActiveWindow, text) != null
+    private fun root(): AccessibilityNodeInfo? {
+        if (Build.VERSION.SDK_INT >= 33) automation.clearCache()
+        return automation.rootInActiveWindow
+    }
+    private fun textExists(text: String) = find(root(), text) != null
     private fun capturePreview(name: String) {
         instrumentation.waitForIdleSync()
         automation.waitForIdle(500, 5_000)
@@ -190,11 +189,12 @@ class PracticeLifecycleTest {
         } finally { screenshot.recycle() }
     }
     private fun checked(text: String): Boolean {
-        var node = find(automation.rootInActiveWindow, text)
+        reveal(text, AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)
+        var node = find(root(), text)
         while (node != null && !node.isCheckable) node = node.parent
         return checkNotNull(node) { "Missing toggle $text" }.isChecked
     }
-    private fun described(text: String, node: AccessibilityNodeInfo? = automation.rootInActiveWindow): AccessibilityNodeInfo? {
+    private fun described(text: String, node: AccessibilityNodeInfo? = root()): AccessibilityNodeInfo? {
         if (node == null || node.contentDescription?.toString() == text) return node
         for (index in 0 until node.childCount) described(text, node.getChild(index))?.let { return it }
         return null
@@ -204,17 +204,22 @@ class PracticeLifecycleTest {
     }
     private fun assertVisible(text: String) {
         reveal(text, AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
-        val node = find(automation.rootInActiveWindow, text) ?: error("Missing visible sample: $text")
+        val node = find(root(), text) ?: error("Missing visible sample: $text")
         assertTrue("Sample title was clipped or empty: $text", visible(node))
     }
     private fun reveal(text: String, direction: Int, clickable: Boolean = false) {
         var searchDirection = direction
         waitUntil {
-            val root = automation.rootInActiveWindow
+            val root = root()
             val target = find(root, text, clickable)
-            if (target != null && visible(target)) true
+            if (target != null && target.refresh() && visible(target)) {
+                !clickable || target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            }
             else {
-                scrollable(root)?.let { container ->
+                val feedbackTarget = text == "Hand detected" || text == "Practice stopped"
+                val container = scrollableAncestor(target)
+                    ?: if (feedbackTarget) scrollableAncestor(find(root, "Live feedback")) else null
+                (container ?: scrollable(root))?.let { container ->
                     if (target != null) {
                         val viewport = bounds(container)
                         val targetBounds = bounds(target)
@@ -270,9 +275,14 @@ class PracticeLifecycleTest {
     }
     private fun scrollable(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
         if (node == null) return null
-        if (node.isScrollable) return node
-        for (index in 0 until node.childCount) scrollable(node.getChild(index))?.let { return it }
-        return null
+        var result = if (node.isScrollable) node else null
+        for (index in 0 until node.childCount) scrollable(node.getChild(index))?.let { result = it }
+        return result
+    }
+    private fun scrollableAncestor(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
+        var ancestor = node?.parent
+        while (ancestor != null && !ancestor.isScrollable) ancestor = ancestor.parent
+        return ancestor
     }
     private fun waitUntil(condition: () -> Boolean) {
         val deadline = System.nanoTime() + 20_000_000_000L

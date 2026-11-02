@@ -10,7 +10,7 @@ data class NativeSettings(
     val tracking: TrackingConfig = TrackingConfig(),
     val motion: MotionDetectionConfig = MotionDetectionConfig(),
     val flick: FlickDetectionConfig = FlickDetectionConfig(),
-    val pose: HandPoseDetectionConfig = HandPoseDetectionConfig(tapGesturesEnabled = true, rearmMode = HandPoseRearmMode.TIMED),
+    val pose: HandPoseDetectionConfig = HandPoseDetectionConfig(),
     val scroll: ScrollConfig = ScrollConfig(),
     val swipeDurationMs: Long = 220,
     val swipeDistance: Double = 0.5,

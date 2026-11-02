@@ -2,169 +2,126 @@ package dev.autoscroll.nativeapp.gesture
 
 import kotlin.math.min
 
-class HandPoseDetector(val config: HandPoseDetectionConfig = HandPoseDetectionConfig()) {
-    private val classifier = HandPoseClassifier(config)
-
-    init {
-        require(config.confirmationDurationMs > 0 && config.releaseDurationMs > 0 &&
-            config.stablePoseDurationMs > 0 && config.cooldownMs >= 0 &&
-            config.minimumObservations >= 2 && config.maximumSampleGapMs > 0) {
-            "Invalid hand pose durations or observation count."
-        }
-        require(config.rearmMode != HandPoseRearmMode.TIMED || config.cooldownMs > 0)
-        require(!config.tapGesturesEnabled || config.rearmMode == HandPoseRearmMode.TIMED)
-    }
-
-    var phase = HandPosePhase.READY
+class HandPoseDetector(config: HandPoseDetectionConfig = HandPoseDetectionConfig(), actions: PoseActions = PoseActions()) {
+    private val actions = actions.effective()
+    var config = config
         private set
-    var currentPose = RecognizedHandPose.UNKNOWN
-        private set
-    var lastEvent: PoseEvent? = null
-        private set
-    private var activePose: RecognizedHandPose? = null
+    private var classifier = HandPoseClassifier(config)
     private var lastTime: Long? = null
-    private var candidateStart: Long? = null
+    private var candidate: PoseId? = null
+    private var candidateStart = 0L
     private var observations = 0
-    private var rearmStart: Long? = null
-    private var rearmObservations = 0
-    private var rearmPose: RecognizedHandPose? = null
-    private var openHandTapped = false
+    private var confirmed = false
+    private var lastEventAt: Long? = null
+    private val latched = mutableSetOf<PoseId>()
+    private var releasePose: PoseId? = null
+    private var releaseStart = 0L
+    private var releaseObservations = 0
+    private var targetFence: PoseId? = null
+    private var current: PoseId? = null
+    private var lastObserved: PoseId? = null
 
-    val suppressesContinuous: Boolean get() = phase != HandPosePhase.READY ||
-        (config.enabled && config.tapGesturesEnabled && currentPose == RecognizedHandPose.NEUTRAL)
-    val confirmationProgress: Double get() {
-        val start = candidateStart
-        val time = lastTime
-        if (phase != HandPosePhase.CONFIRMING || start == null || time == null) return 0.0
-        return min(((time - start) / config.confirmationDurationMs.toDouble()).coerceIn(0.0, 1.0),
-            observations / config.minimumObservations.toDouble())
-    }
-    val cooldownRemainingMs: Long get() {
-        val event = lastEvent
-        val time = lastTime
-        if (event == null || time == null) return 0
-        return (config.cooldownMs - (time - event.timestampMs)).coerceAtLeast(0)
+    init { validate(config) }
+
+    private fun validate(config: HandPoseDetectionConfig) {
+        require(config.confirmationDurationMs > 0 && config.releaseDurationMs > 0 &&
+            config.minimumObservations >= 2 && config.maximumSampleGapMs > 0 && config.cooldownMs >= 0)
     }
 
-    fun process(result: HandTrackingResult): PoseEvent? {
-        if (!config.enabled) return null
-        val time = result.timestampMs
+    fun configure(config: HandPoseDetectionConfig) {
+        validate(config)
+        val updated = HandPoseClassifier(config)
+        targetChanged()
+        this.config = config
+        classifier = updated
+    }
+
+    var ownsGesture: Boolean = false
+        private set
+
+    fun process(result: HandTrackingResult): PoseResult {
+        if (!config.enabled) { loseTracking(); return PoseResult(timestampMs = result.timestampMs) }
+        val previous = lastTime
+        val active = candidate.takeIf { previous != null && result.timestampMs > previous &&
+            result.timestampMs - previous <= config.maximumSampleGapMs }
+        val pose = result.pose?.let { classifier.classify(it.landmarks, result.uprightAspectRatio, actions.profile, active) }
+        return processPose(result.timestampMs, pose)
+    }
+
+    internal fun processPose(time: Long, pose: PoseId?): PoseResult {
         val previous = lastTime
         if (time < 0 || (previous != null && time <= previous)) {
             loseTracking()
-            return null
+            return PoseResult(timestampMs = time)
         }
         lastTime = time
-        if (config.rearmMode == HandPoseRearmMode.TIMED &&
-            (phase == HandPosePhase.LATCHED || phase == HandPosePhase.WAITING_REARM) && cooldownRemainingMs == 0L) {
-            phase = HandPosePhase.READY
-            activePose = null
-            discardEvidence()
-        }
-        val pose = result.pose
+        if (previous != null && time - previous > config.maximumSampleGapMs) loseTracking()
+        current = pose
         if (pose == null) {
             loseTracking()
-            return null
+            return PoseResult(timestampMs = time)
         }
-        if (previous != null && time - previous > config.maximumSampleGapMs) discardEvidence()
-        currentPose = classifier.classify(pose.landmarks, activePose)
-        // Held open hand must not toggle playback again after the rearm timer expires.
-        if (currentPose != RecognizedHandPose.UNKNOWN && currentPose != RecognizedHandPose.NEUTRAL) openHandTapped = false
-        when (phase) {
-            HandPosePhase.READY -> if (isAction(currentPose)) beginCandidate(time)
-            HandPosePhase.CONFIRMING -> {
-                if (currentPose != activePose) {
-                    discardEvidence()
-                    if (isAction(currentPose)) beginCandidate(time)
-                    return null
-                }
-                if (observations < config.minimumObservations) observations++
-                if (observations >= config.minimumObservations && time - candidateStart!! >= config.confirmationDurationMs) {
-                    val event = PoseEvent(activePose!!, time)
-                    lastEvent = event
-                    if (event.pose == RecognizedHandPose.NEUTRAL) openHandTapped = true
-                    phase = HandPosePhase.LATCHED
-                    candidateStart = null
-                    observations = 0
-                    if (!config.tapGesturesEnabled && config.rearmMode == HandPoseRearmMode.STABLE_POSE) {
-                        rearmStart = time
-                        rearmObservations = 1
-                        rearmPose = currentPose
-                    }
-                    return event
-                }
-            }
-            HandPosePhase.LATCHED, HandPosePhase.WAITING_REARM -> updateRearm(time)
+        lastObserved = pose
+        if (releasePose != pose) {
+            releasePose = pose
+            releaseStart = time
+            releaseObservations = 1
+        } else if (releaseObservations < config.minimumObservations) releaseObservations++
+        if (releaseObservations >= config.minimumObservations && time - releaseStart >= config.releaseDurationMs) {
+            latched.removeAll { it != pose }
+            if (targetFence != pose) targetFence = null
         }
-        return null
+        val trigger = actions.actionFor(pose).trigger
+        ownsGesture = trigger != PoseTrigger.INACTIVE
+        if (!ownsGesture || targetFence != null) {
+            clearCandidate()
+            return PoseResult(pose = pose, timestampMs = time)
+        }
+        if (candidate != pose) {
+            candidate = pose
+            candidateStart = time
+            observations = 1
+            confirmed = false
+        } else if (observations < config.minimumObservations) observations++
+        val progress = min(((time - candidateStart) / config.confirmationDurationMs.toDouble()).coerceIn(0.0, 1.0),
+            observations / config.minimumObservations.toDouble())
+        if (observations >= config.minimumObservations && time - candidateStart >= config.confirmationDurationMs) confirmed = true
+        var event: PoseId? = null
+        if (confirmed && trigger == PoseTrigger.DISCRETE && pose !in latched &&
+            (lastEventAt == null || time - lastEventAt!! >= config.cooldownMs)) {
+            event = pose
+            latched.add(pose)
+            lastEventAt = time
+        }
+        return PoseResult(pose, if (confirmed) HandPosePhase.LATCHED else HandPosePhase.CONFIRMING,
+            progress, event, if (confirmed && trigger == PoseTrigger.HELD) pose else null, time)
     }
 
-    private fun updateRearm(time: Long) {
-        if (config.rearmMode == HandPoseRearmMode.TIMED) return
-        val openHand = config.rearmMode == HandPoseRearmMode.OPEN_HAND
-        val valid = if (openHand) currentPose == RecognizedHandPose.NEUTRAL else currentPose != RecognizedHandPose.UNKNOWN
-        if (!valid) {
-            discardEvidence()
-            return
-        }
-        phase = HandPosePhase.WAITING_REARM
-        if (rearmStart == null || rearmPose != currentPose) {
-            rearmStart = time
-            rearmObservations = 1
-            rearmPose = currentPose
-            return
-        }
-        if (rearmObservations < 2) rearmObservations++
-        val duration = if (openHand) config.releaseDurationMs else config.stablePoseDurationMs
-        if (rearmObservations >= 2 && time - rearmStart!! >= duration && time - lastEvent!!.timestampMs >= config.cooldownMs) {
-            phase = HandPosePhase.READY
-            activePose = null
-            discardEvidence()
-        }
-    }
-
-    private fun beginCandidate(time: Long) {
-        phase = HandPosePhase.CONFIRMING
-        activePose = currentPose
-        candidateStart = time
-        observations = 1
-    }
-
-    private fun isPointing(pose: RecognizedHandPose): Boolean =
-        pose == RecognizedHandPose.POINTING_UP || pose == RecognizedHandPose.POINTING_DOWN
-
-    private fun isAction(pose: RecognizedHandPose): Boolean = isPointing(pose) ||
-        (config.tapGesturesEnabled && (pose == RecognizedHandPose.THUMBS_UP ||
-            (pose == RecognizedHandPose.NEUTRAL && !openHandTapped)))
-
-    private fun discardEvidence() {
-        candidateStart = null
-        observations = 0
-        rearmStart = null
-        rearmObservations = 0
-        rearmPose = null
-        if (phase == HandPosePhase.CONFIRMING) {
-            phase = HandPosePhase.READY
-            activePose = null
-        } else if (phase == HandPosePhase.WAITING_REARM) phase = HandPosePhase.LATCHED
+    fun targetChanged() {
+        targetFence = targetFence ?: current ?: candidate ?: lastObserved
+        loseTracking()
     }
 
     fun loseTracking() {
-        currentPose = RecognizedHandPose.UNKNOWN
-        discardEvidence()
+        clearCandidate()
+        current = null
+        releasePose = null
+        releaseObservations = 0
+        ownsGesture = false
+    }
+
+    private fun clearCandidate() {
+        candidate = null
+        observations = 0
+        confirmed = false
     }
 
     fun reset() {
-        phase = HandPosePhase.READY
-        currentPose = RecognizedHandPose.UNKNOWN
-        activePose = null
+        loseTracking()
         lastTime = null
-        candidateStart = null
-        observations = 0
-        rearmStart = null
-        rearmObservations = 0
-        rearmPose = null
-        lastEvent = null
-        openHandTapped = false
+        lastEventAt = null
+        latched.clear()
+        targetFence = null
+        lastObserved = null
     }
 }

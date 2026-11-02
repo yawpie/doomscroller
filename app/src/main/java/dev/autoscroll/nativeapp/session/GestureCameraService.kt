@@ -68,11 +68,11 @@ class GestureCameraService : LifecycleService() {
     private var diagnostics = SessionDiagnostics()
     private var foreground = false
     private var destroyed = false
-    private var customSession = false
-    private var customTarget: TargetWindowState? = null
-    private var customEligible = false
-    private var customFenceMs = 0L
-    private var lastCustomResultMs: Long? = null
+    private var poseSession = false
+    private var poseTarget: TargetWindowState? = null
+    private var poseEligible = false
+    private var poseFenceMs = 0L
+    private var lastPoseResultMs: Long? = null
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == Intent.ACTION_SCREEN_OFF) pauseSession()
@@ -95,13 +95,13 @@ class GestureCameraService : LifecycleService() {
             store.visibility.collect { visible ->
                 overlay?.visible(!visible)
                 if (visible) cancelPointer("Pointer hidden while Scroll Vision is open")
-                if (customSession) syncCustomEligibility()
+                if (poseSession) syncPoseEligibility()
             }
         }
         lifecycleScope.launch {
             GestureAccessibilityService.targetState.collect {
                 cancelPointer("Target app changed. Separate your fingers and point steadily.")
-                if (customSession) syncCustomEligibility()
+                if (poseSession) syncPoseEligibility()
             }
         }
         lifecycleScope.launch {
@@ -159,14 +159,14 @@ class GestureCameraService : LifecycleService() {
         val token = machine.start() ?: return
         try {
             sessionMode = settings.controlMode
-            customSession = sessionMode == ControlMode.SCROLL && settings.poseActions.enabled &&
+            poseSession = sessionMode == ControlMode.SCROLL &&
                 (settings.mode == GestureMode.POSE || settings.mode == GestureMode.HYBRID)
-            customTarget = null; customEligible = false; customFenceMs = SystemClock.elapsedRealtime(); lastCustomResultMs = null
+            poseTarget = null; poseEligible = false; poseFenceMs = SystemClock.elapsedRealtime(); lastPoseResultMs = null
             val notification = notification()
             if (Build.VERSION.SDK_INT >= 30) startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA)
             else startForeground(NOTIFICATION_ID, notification)
             foreground = true
-            actions.configure(settings.scroll, settings.inverted, if (customSession) settings else null)
+            actions.configure(settings.scroll, settings.inverted, if (poseSession) settings else null)
             adapter.configure(SwipeConfig(startY = 0.5 + settings.swipeDistance / 2,
                 endY = 0.5 - settings.swipeDistance / 2, durationMs = settings.swipeDurationMs))
             recognition = SessionRecognition(settings, calibration, bounds, screenRotation())
@@ -185,29 +185,29 @@ class GestureCameraService : LifecycleService() {
                                 if (sessionMode == ControlMode.POINTER) {
                                     processPointer(result); return@CameraController
                                 }
-                                if (customSession) {
-                                    syncCustomEligibility()
+                                if (poseSession) {
+                                    syncPoseEligibility()
                                     val now = SystemClock.elapsedRealtime()
-                                    if (!customEligible || result.timestampMs <= customFenceMs || result.timestampMs > now ||
+                                    if (!poseEligible || result.timestampMs <= poseFenceMs || result.timestampMs > now ||
                                         now - result.timestampMs > settings.scroll.staleAfterMs ||
-                                        lastCustomResultMs?.let { result.timestampMs <= it } == true) {
+                                        lastPoseResultMs?.let { result.timestampMs <= it } == true) {
                                         recognition?.loseTracking()
                                         actions.invalidate()
                                         return@CameraController
                                     }
-                                    lastCustomResultMs = result.timestampMs
+                                    lastPoseResultMs = result.timestampMs
                                 } else if (overlayInteracting || manualSwipe?.isActive == true) return@CameraController
                                 actions.setSessionActive(true)
                                 val wasDetected = diagnostics.handDetected
                                 val decision = recognition!!.process(result, SystemClock.elapsedRealtime(), contentBounds(), true).scroll!!
                                 actions.process(decision, result.timestampMs,
-                                    if (customSession) customTarget?.packageName else null,
-                                    if (customSession) customTarget?.generation else null)
+                                    if (poseSession) poseTarget?.packageName else null,
+                                    if (poseSession) poseTarget?.generation else null)
                                 diagnostics = diagnostics.copy(handDetected = result.handDetected,
-                                    pose = decision.customPose?.pose?.name ?: if (customSession) "UNKNOWN" else gestures!!.poseDetector.currentPose.name,
-                                    posePhase = decision.customPose?.phase?.name ?: gestures!!.poseDetector.phase.name,
+                                    pose = decision.poseResult?.pose?.name ?: "UNKNOWN",
+                                    posePhase = decision.poseResult?.phase?.name ?: HandPosePhase.READY.name,
                                     lastFlick = decision.flick?.direction?.name ?: diagnostics.lastFlick,
-                                    lastPose = decision.customPose?.event?.name ?: decision.pose?.pose?.name ?: diagnostics.lastPose,
+                                    lastPose = decision.poseResult?.event?.name ?: diagnostics.lastPose,
                                     trackingLossCount = diagnostics.trackingLossCount + if (wasDetected && !result.handDetected) 1 else 0)
                                 publishDiagnostics()
                             }
@@ -232,13 +232,13 @@ class GestureCameraService : LifecycleService() {
             while (machine.generation == token) {
                 delay(250)
                 val settings = app.settings.state.value
-                if (customSession && machine.state == GestureSessionState.Active) {
-                    syncCustomEligibility()
-                    val last = lastCustomResultMs
+                if (poseSession && machine.state == GestureSessionState.Active) {
+                    syncPoseEligibility()
+                    val last = lastPoseResultMs
                     if (last != null && SystemClock.elapsedRealtime() - last > minOf(settings.scroll.staleAfterMs, settings.pose.maximumSampleGapMs)) {
                         recognition?.loseTracking()
                         actions.invalidate()
-                        lastCustomResultMs = null
+                        lastPoseResultMs = null
                     }
                 }
                 when {
@@ -274,7 +274,7 @@ class GestureCameraService : LifecycleService() {
                 overlayInteracting = pressed
                 adapter.suspendForInteraction()
                 actions.setSessionActive(false)
-                if (customSession) recognition?.targetChanged() else gestures?.reset()
+                if (poseSession) recognition?.targetChanged() else gestures?.reset()
                 cancelPointer("Floating controls interaction")
             },
         ).also { it.show(); it.visible(!store.activityVisible) }
@@ -289,18 +289,18 @@ class GestureCameraService : LifecycleService() {
         ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED &&
         Settings.canDrawOverlays(this) && GestureAccessibilityService.connectedService?.pointerAllowed() == true
 
-    private fun syncCustomEligibility() {
+    private fun syncPoseEligibility() {
         val target = GestureAccessibilityService.targetState.value
         val eligible = machine.state == GestureSessionState.Active && !store.activityVisible && !overlayInteracting &&
             manualSwipe?.isActive != true && app.settings.accessibilityConsent &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED &&
             GestureAccessibilityService.connectedService?.pointerAllowed() == true && target.allowed && target.packageName != null &&
             (!app.settings.state.value.overlayEnabled || Settings.canDrawOverlays(this))
-        if (target != customTarget || eligible != customEligible) {
-            customTarget = target
-            customEligible = eligible
-            customFenceMs = SystemClock.elapsedRealtime()
-            lastCustomResultMs = null
+        if (target != poseTarget || eligible != poseEligible) {
+            poseTarget = target
+            poseEligible = eligible
+            poseFenceMs = SystemClock.elapsedRealtime()
+            lastPoseResultMs = null
             recognition?.targetChanged()
             actions.invalidate()
         }
@@ -427,7 +427,7 @@ class GestureCameraService : LifecycleService() {
         overlayInteracting = false
         watchdog?.cancel(); watchdog = null
         actions.setSessionActive(false)
-        customSession = false; customTarget = null; customEligible = false; lastCustomResultMs = null
+        poseSession = false; poseTarget = null; poseEligible = false; lastPoseResultMs = null
         cancelPointer("Session ended")
         recognition?.reset(); recognition = null
         cursor?.close(); cursor = null
@@ -445,7 +445,7 @@ class GestureCameraService : LifecycleService() {
         manualSwipe?.cancel()
         val token = machine.generation
         actions.setSessionActive(false)
-        if (customSession) recognition?.targetChanged() else gestures?.reset()
+        if (poseSession) recognition?.targetChanged() else gestures?.reset()
         manualSwipe = lifecycleScope.launch {
             try {
                 delay(850)
@@ -457,7 +457,7 @@ class GestureCameraService : LifecycleService() {
                 }
             } finally {
                 if (machine.accepts(token) && !overlayInteracting) {
-                    if (customSession) recognition?.targetChanged() else gestures?.reset()
+                    if (poseSession) recognition?.targetChanged() else gestures?.reset()
                     actions.setSessionActive(true)
                 }
             }

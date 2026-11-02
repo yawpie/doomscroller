@@ -204,15 +204,15 @@ internal fun HandScrollScreen(
                         if (settings.poseActions.enabled) SavedPoseActionsGuide(settings)
                         if (!settings.poseActions.enabled && (settings.mode == GestureMode.HYBRID || settings.mode == GestureMode.POSE)) {
                             GestureCard(if (settings.inverted) "Previous item" else "Next item", HandDrawing.DOWN,
-                                "Point your index finger down. Curl the other fingers.", "Holding this pose can repeat after the rearm delay and fresh confirmation.")
+                                "Point your index finger down. Curl the other fingers and thumb.", "Runs once per appearance. Show a different valid pose before repeating.")
                             GestureCard(if (settings.inverted) "Next item" else "Previous item", HandDrawing.UP,
-                                "Point your index finger up. Curl the other fingers.", "Holding this pose can repeat after the rearm delay and fresh confirmation.")
+                                "Point your index finger up. Curl the other fingers and thumb.", "Runs once per appearance. Show a different valid pose before repeating.")
                             GestureCard("Tap video", HandDrawing.OPEN,
-                                "Show an open hand for one tap at the center of your feed. This may toggle play or pause, depending on the app.",
+                                "Show all five fingers open for one tap at the center of your feed. This may toggle play or pause, depending on the app.",
                                 "Tracking stays on. Holding your hand open sends no extra taps and blocks movement gestures. Show a different visible pose before another open-hand tap; losing tracking alone does not rearm it.")
                             GestureCard("Double tap", HandDrawing.THUMB,
                                 "Show a thumbs-up with the other four fingers curled. Sends two center taps; the result depends on your feed.",
-                                "Holding thumbs-up can repeat after the rearm delay and fresh confirmation.")
+                                "Runs once per appearance. Show a different valid pose before repeating.")
                         }
                         if (settings.mode == GestureMode.HYBRID || settings.mode == GestureMode.FLICK) {
                             GestureCard("Flick to navigate", HandDrawing.FLICK,
@@ -332,7 +332,7 @@ private fun HandIllustration(drawing: HandDrawing) {
             HandDrawing.DOWN -> "Hand illustration: index finger pointing down, other fingers curled"
             HandDrawing.LEFT -> "Hand illustration: index finger pointing left, other fingers and thumb curled"
             HandDrawing.RIGHT -> "Hand illustration: index finger pointing right, other fingers and thumb curled"
-            HandDrawing.INDEX_ONLY -> "Hand illustration: index finger extended, other fingers and thumb curled"
+            HandDrawing.INDEX_ONLY -> "Hand illustration: index finger pointing up, other fingers and thumb curled"
             HandDrawing.MIDDLE_ONLY -> "Hand illustration: middle finger extended, other fingers and thumb curled"
             HandDrawing.INDEX_MIDDLE -> "Hand illustration: index and middle fingers extended, other fingers and thumb curled"
             HandDrawing.CLOSED -> "Hand illustration: four fingers curled, thumb close to fist"
@@ -402,7 +402,7 @@ private fun compactGuide(settings: NativeSettings) = if (settings.controlMode ==
     else if (settings.poseActions.enabled && (settings.mode == GestureMode.POSE || settings.mode == GestureMode.HYBRID))
     "Custom pose actions follow your saved profile. Open Gestures for the pose and action list."
     else when (settings.mode) {
-    GestureMode.POSE -> "Point down/up to navigate. Open hand: tap video once. Thumbs-up: double tap. Pointing and thumbs-up can repeat."
+    GestureMode.POSE -> "Point down/up to navigate. Open hand: tap video once. Thumbs-up: double tap. Show a different valid pose before repeating an action."
     GestureMode.HYBRID -> "Point down/up or flick to navigate; move your palm to scroll. Open hand: tap video once. Thumbs-up: double tap."
     GestureMode.FLICK -> "Flick your palm down/up to navigate. Settle your hand before repeating. Pose taps are off in this mode."
     GestureMode.CONTINUOUS -> "Move your palm vertically to scroll. Hold still to stop scrolling. Pose taps are off in this mode."
