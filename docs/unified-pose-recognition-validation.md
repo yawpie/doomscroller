@@ -1,5 +1,19 @@
 # Unified pose recognition validation
 
+The classifier now includes estimated landmark depth in joint-angle calculations;
+direction and minimum visible bone checks remain screen-based. A synthetic rigidly
+tilted hand exercises finger identity, up/left/right detector transitions, mirroring,
+aspect ratios, and depth-related rejection. This is not a camera or physical-device
+accuracy result. See the [MediaPipe landmark coordinate reference](https://developers.google.com/edge/api/mediapipe/java/com/google/mediapipe/tasks/components/containers/NormalizedLandmark)
+for the approximate depth scale.
+
+For this depth change, the full six-task gate succeeded in 2m 32s
+(`artifacts/depth-pose-final-gate.txt`). The unfiltered `:gesture:test` suite was
+then rerun against the final fixture and succeeded in 3s
+(`artifacts/depth-pose-native-final.txt`). The combined unit results contain 167
+tests, with no failures, errors or skips. No UI, emulator or physical-device tests
+were rerun for this change; the historical results below are not current evidence.
+
 This receipt covers the replacement of the fixed pose pipeline with the shared
 canonical classifier and detector. The default preset and custom bindings now
 use the same recognition path. Strict canonical geometry and discrete actions

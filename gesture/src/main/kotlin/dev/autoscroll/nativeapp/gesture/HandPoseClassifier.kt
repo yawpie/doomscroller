@@ -31,10 +31,12 @@ class HandPoseClassifier(val config: HandPoseDetectionConfig = HandPoseDetection
         fun angle(a: Int, b: Int, c: Int): Double {
             val ax = (points[a].x - points[b].x) * aspect
             val ay = points[a].y - points[b].y
+            val az = (points[a].z - points[b].z) * aspect
             val bx = (points[c].x - points[b].x) * aspect
             val by = points[c].y - points[b].y
-            val denominator = hypot(ax, ay) * hypot(bx, by)
-            return if (denominator <= 1e-12) 0.0 else acos(((ax * bx + ay * by) / denominator).coerceIn(-1.0, 1.0)) * 180 / PI
+            val bz = (points[c].z - points[b].z) * aspect
+            val denominator = hypot(hypot(ax, ay), az) * hypot(hypot(bx, by), bz)
+            return if (denominator <= 1e-12) 0.0 else acos(((ax * bx + ay * by + az * bz) / denominator).coerceIn(-1.0, 1.0)) * 180 / PI
         }
         val palm = distance(0, 9)
         if (palm <= 1e-9) return null

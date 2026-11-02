@@ -72,6 +72,55 @@ class CustomPoseTest {
         }
     }
 
+    @Test fun tiltedHandKeepsFingerIdentityAndScreenDirectionAcrossTransitions() {
+        fun tilted(open: Set<Int>, rotation: Double, mirror: Boolean, aspect: Double,
+            thumbOpen: Boolean = false): List<HandLandmark> {
+            val tilt = 65 * PI / 180
+            val a = (1 + cos(tilt)) / 2
+            val b = (1 - cos(tilt)) / 2
+            val source = points(open, thumbOpen).toMutableList()
+            for (mcp in listOf(5, 9, 13, 17).filter { it !in open }) {
+                source[mcp + 2] = source[mcp + 2].copy(x = source[mcp].x, z = 0.05)
+                source[mcp + 3] = source[mcp + 3].copy(x = source[mcp].x, z = 0.05)
+            }
+            return source.map { p ->
+                val x = p.x - 0.5
+                val y = p.y - 0.5
+                val depth = sin(tilt) / kotlin.math.sqrt(2.0)
+                val tx = (a * x - b * y - depth * p.z) * if (mirror) -1 else 1
+                val ty = a * y - b * x - depth * p.z
+                p.copy(x = 0.5 + (tx * cos(rotation) - ty * sin(rotation)) / aspect,
+                    y = 0.5 + tx * sin(rotation) + ty * cos(rotation),
+                    z = (depth * (x + y) + cos(tilt) * p.z) / aspect)
+            }
+        }
+        val classifier = HandPoseClassifier(config)
+        for (aspect in listOf(0.75, 1.0, 1.5)) for (mirror in listOf(false, true)) {
+            val up = tilted(setOf(5), 0.0, mirror, aspect)
+            val left = tilted(setOf(5), -PI / 2, mirror, aspect)
+            val right = tilted(setOf(5), PI / 2, mirror, aspect)
+            assertEquals(PoseId.INDEX_ONLY, classifier.classify(up, aspect, combinations))
+            assertNull(classifier.classify(left, aspect, combinations))
+            assertNull(classifier.classify(right, aspect, combinations))
+            assertNull(classifier.classify(tilted(setOf(5, 9), 0.0, mirror, aspect), aspect, direction))
+            assertEquals(PoseId.INDEX_MIDDLE, classifier.classify(tilted(setOf(5, 9), 0.0, mirror, aspect), aspect, combinations))
+            assertNull(classifier.classify(tilted(setOf(5), 0.0, mirror, aspect, thumbOpen = true), aspect, combinations))
+            val actions = PoseActions(enabled = true, profile = direction)
+                .withBinding(PoseId.POINTING_LEFT, PoseAction.SCROLL_LEFT)
+                .withBinding(PoseId.POINTING_RIGHT, PoseAction.SCROLL_RIGHT)
+            val detector = HandPoseDetector(config, actions)
+            for ((i, entry) in listOf(up to PoseId.POINTING_UP, left to PoseId.POINTING_LEFT,
+                right to PoseId.POINTING_RIGHT).withIndex()) {
+                for (step in 0..2) {
+                    val result = detector.process(HandTrackingResult((i * 3L + step) * 200, HandPose(entry.first),
+                        uprightAspectRatio = aspect))
+                    assertEquals(entry.second, result.pose)
+                    if (step == 2) assertEquals(entry.second, result.event)
+                }
+            }
+        }
+    }
+
     @Test fun aspectMirrorSectorsAndAmbiguityAreHandled() {
         val classifier = HandPoseClassifier(config)
         for ((angle, expected) in listOf(0.0 to PoseId.POINTING_UP, PI / 2 to PoseId.POINTING_RIGHT,
@@ -238,9 +287,23 @@ class CustomPoseTest {
         assertEquals(PoseId.POINTING_UP, process(1500, setOf(5)).poseResult?.event)
     }
 
-    @Test fun landmarkDepthDoesNotAlterPlanarClassification() {
+    @Test fun depthTranslationDoesNotAlterClassification() {
         val p = points(setOf(5)).map { it.copy(z = -10.0) }
         assertEquals(PoseId.POINTING_UP, HandPoseClassifier(config).classify(p, 1.0, direction))
+    }
+
+    @Test fun fingerPointedTowardCameraIsNotUp() {
+        val p = points(setOf(5)).toMutableList()
+        for (i in 6..8) p[i] = p[i].copy(y = p[5].y - (i - 5) * 0.01, z = -(i - 5) * 0.07)
+        val classifier = HandPoseClassifier(config)
+        assertNull(classifier.classify(p, 1.0, combinations))
+        assertNull(classifier.classify(p, 1.0, direction))
+    }
+
+    @Test fun fingerBentInDepthIsNotTreatedAsStraight() {
+        val p = points(setOf(5)).toMutableList()
+        p[7] = p[7].copy(z = 0.1)
+        assertNull(HandPoseClassifier(config).classify(p, 1.0, combinations))
     }
 
     @Test fun disabledSavedBindingsUseDefaultProfileEvenWithDirectDetectorConstruction() {

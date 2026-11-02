@@ -87,6 +87,9 @@ built-in direction profile and common pose bindings without changing saved custo
 settings. An open hand requires five extended fingers; pointing requires the
 thumb and remaining fingers folded. In the finger-combinations profile, index only
 also requires an upward orientation; middle only and index-middle remain independent.
+Joint angles use the landmarks' approximate depth as well as aspect-corrected screen
+coordinates; direction, distance checks and minimum visible bone lengths remain in
+the screen plane. Depth is estimated, so real-hand accuracy still needs device validation.
 A confirmed discrete action runs once per
 appearance. Loss alone cannot rearm it: another valid pose must satisfy the release
 duration and observation count, and cooldown must also expire. NONE does not claim
