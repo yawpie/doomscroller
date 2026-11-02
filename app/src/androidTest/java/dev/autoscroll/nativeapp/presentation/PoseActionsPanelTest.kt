@@ -40,9 +40,9 @@ class PoseActionsPanelTest {
                     PoseActionsPanel(state.value, { state.value = it }, null)
                 }
             } } }
-            reveal("Index finger only: No action")
+            reveal("Index finger only (point up): No action")
             capture("pose-actions-editor.png")
-            click("Index finger only: No action")
+            click("Index finger only (point up): No action")
             capture("pose-actions-picker.png")
             click("Back")
             click("Middle finger only: No action")
@@ -54,7 +54,7 @@ class PoseActionsPanelTest {
                 assertEquals(PoseAction.NEXT_ITEM, state.value.poseActions.bindings[PoseId.MIDDLE_ONLY])
                 assertEquals(PoseAction.CONTINUOUS_PREVIOUS, state.value.poseActions.bindings[PoseId.INDEX_MIDDLE])
             }
-            click("Index finger only: Back")
+            click("Index finger only (point up): Back")
             click("Scroll left once")
             click("Middle finger only: Scroll next once")
             click("Scroll right once")

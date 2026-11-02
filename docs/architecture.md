@@ -85,7 +85,9 @@ POSE and HYBRID use one canonical classifier and detector for both the default
 preset and custom bindings. With custom actions off, a snapshot selects the
 built-in direction profile and common pose bindings without changing saved custom
 settings. An open hand requires five extended fingers; pointing requires the
-thumb and remaining fingers folded. A confirmed discrete action runs once per
+thumb and remaining fingers folded. In the finger-combinations profile, index only
+also requires an upward orientation; middle only and index-middle remain independent.
+A confirmed discrete action runs once per
 appearance. Loss alone cannot rearm it: another valid pose must satisfy the release
 duration and observation count, and cooldown must also expire. NONE does not claim
 HYBRID ownership; existing flick ownership takes priority and suppression resets

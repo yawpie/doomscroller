@@ -50,10 +50,25 @@ class CustomPoseTest {
         assertEquals(PoseId.POINTING_UP, classify(setOf(5), profile = direction))
         assertNull(classify(setOf(5), thumb = true))
         for (rotation in listOf(0.0, PI / 2, PI, -PI / 2)) for (mirror in listOf(false, true)) {
-            for ((open, expected) in listOf(setOf(5) to PoseId.INDEX_ONLY, setOf(9) to PoseId.MIDDLE_ONLY,
-                setOf(5, 9) to PoseId.INDEX_MIDDLE)) {
+            for ((open, expected) in listOf(setOf(9) to PoseId.MIDDLE_ONLY, setOf(5, 9) to PoseId.INDEX_MIDDLE)) {
                 assertEquals(expected, classifier.classify(points(open, rotation = rotation, mirror = mirror), 1.0, combinations))
             }
+        }
+    }
+
+    @Test fun indexOnlyRequiresUpwardAlignmentWithHysteresis() {
+        val classifier = HandPoseClassifier(config)
+        for (aspect in listOf(0.75, 1.0, 1.5)) for (mirror in listOf(false, true)) {
+            fun classify(rotation: Double, active: PoseId? = null) = classifier.classify(
+                points(setOf(5), rotation = rotation, mirror = mirror, aspect = aspect), aspect, combinations, active)
+            assertEquals(PoseId.INDEX_ONLY, classify(0.0))
+            for (rotation in listOf(PI / 2, PI, -PI / 2, PI / 4, -PI / 4)) {
+                assertNull(classify(rotation))
+            }
+            for (rotation in listOf(PI / 2, PI, -PI / 2)) assertNull(classify(rotation, PoseId.INDEX_ONLY))
+            assertNull(classify(0.65))
+            assertEquals(PoseId.INDEX_ONLY, classify(0.65, PoseId.INDEX_ONLY))
+            assertNull(classify(0.85, PoseId.INDEX_ONLY))
         }
     }
 

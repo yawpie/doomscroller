@@ -332,7 +332,7 @@ private fun HandIllustration(drawing: HandDrawing) {
             HandDrawing.DOWN -> "Hand illustration: index finger pointing down, other fingers curled"
             HandDrawing.LEFT -> "Hand illustration: index finger pointing left, other fingers and thumb curled"
             HandDrawing.RIGHT -> "Hand illustration: index finger pointing right, other fingers and thumb curled"
-            HandDrawing.INDEX_ONLY -> "Hand illustration: index finger extended, other fingers and thumb curled"
+            HandDrawing.INDEX_ONLY -> "Hand illustration: index finger pointing up, other fingers and thumb curled"
             HandDrawing.MIDDLE_ONLY -> "Hand illustration: middle finger extended, other fingers and thumb curled"
             HandDrawing.INDEX_MIDDLE -> "Hand illustration: index and middle fingers extended, other fingers and thumb curled"
             HandDrawing.CLOSED -> "Hand illustration: four fingers curled, thumb close to fist"

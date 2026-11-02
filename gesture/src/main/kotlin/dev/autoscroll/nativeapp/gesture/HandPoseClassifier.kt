@@ -75,7 +75,13 @@ class HandPoseClassifier(val config: HandPoseDetectionConfig = HandPoseDetection
             if (thumb != Finger.CLOSED || fingers[2] != Finger.CLOSED || fingers[3] != Finger.CLOSED) return null
             if (profile == PoseRecognitionProfile.FINGER_COMBINATIONS) return when {
                 fingers[0] == Finger.OPEN && fingers[1] == Finger.OPEN -> PoseId.INDEX_MIDDLE
-                fingers[0] == Finger.OPEN && fingers[1] == Finger.CLOSED -> PoseId.INDEX_ONLY
+                fingers[0] == Finger.OPEN && fingers[1] == Finger.CLOSED -> {
+                    val dx = (points[8].x - points[5].x) * aspect
+                    val dy = points[8].y - points[5].y
+                    val length = hypot(dx, dy)
+                    val threshold = if (exit) config.exitVerticalAlignment else config.minimumVerticalAlignment
+                    if (length > 1e-9 && -dy / length >= threshold) PoseId.INDEX_ONLY else null
+                }
                 fingers[0] == Finger.CLOSED && fingers[1] == Finger.OPEN -> PoseId.MIDDLE_ONLY
                 else -> null
             }

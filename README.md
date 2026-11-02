@@ -50,7 +50,7 @@ pose must be observed for release, and the cooldown also applies. CONTINUOUS/FLI
 Settings → Hand pose actions, choose Pointing directions or Finger combinations,
 then choose an action for each pose. Direction and finger profiles are exclusive;
 open hand, closed hand and thumbs-up are shared. The three finger combinations
-(index only, middle only, index and middle together) have independent bindings.
+(index only pointing up, middle only, index and middle together) have independent bindings.
 Custom actions include one swipe, center tap, double tap, Android Back and scrolling
 while a pose is held. NONE sends no pose action; HYBRID may still use flick/movement.
 Custom mappings work in Scroll with POSE/HYBRID, not Pointer, FLICK or CONTINUOUS.

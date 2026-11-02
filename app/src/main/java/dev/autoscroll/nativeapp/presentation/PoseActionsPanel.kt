@@ -17,7 +17,7 @@ import dev.autoscroll.nativeapp.settings.*
 internal fun poseIdLabel(pose: PoseId) = when (pose) {
     PoseId.POINTING_UP -> "Point up"; PoseId.POINTING_DOWN -> "Point down"
     PoseId.POINTING_LEFT -> "Point left"; PoseId.POINTING_RIGHT -> "Point right"
-    PoseId.INDEX_ONLY -> "Index finger only"; PoseId.MIDDLE_ONLY -> "Middle finger only"
+    PoseId.INDEX_ONLY -> "Index finger only (point up)"; PoseId.MIDDLE_ONLY -> "Middle finger only"
     PoseId.INDEX_MIDDLE -> "Index and middle fingers"; PoseId.OPEN_HAND -> "Open hand"
     PoseId.CLOSED_HAND -> "Closed hand"; PoseId.THUMBS_UP -> "Thumbs-up"
 }
@@ -80,7 +80,7 @@ internal fun PoseActionsPanel(value: NativeSettings, update: (NativeSettings) ->
                 }
             }
         }
-        Text("Index and middle together has its own action; it does not run either single-finger action. Keep the other fingers and thumb folded. Open hand means all five fingers open; closed hand keeps the thumb close to the fist. Thumbs-up extends the thumb with four fingers curled.")
+        Text("Point the index finger up for the index-only action. Index and middle together has its own action; it does not run either single-finger action. Keep the other fingers and thumb folded. Open hand means all five fingers open; closed hand keeps the thumb close to the fist. Thumbs-up extends the thumb with four fingers curled.")
         if (PoseId.entries.filter { it.profile == null || it.profile == actions.profile }.all { actions.actionFor(it) == PoseAction.NONE })
             Text("No pose actions are active in this profile.")
     }
