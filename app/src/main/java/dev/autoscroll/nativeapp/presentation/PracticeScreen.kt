@@ -31,7 +31,7 @@ internal fun PracticeScreen(state: PracticeState, settings: NativeSettings, came
     cameraBlocked: Boolean, cameraExplanation: String?, permissionError: String?,
     onCameraPermission: () -> Unit, onStart: () -> Unit, onStop: () -> Unit, onExit: () -> Unit,
     onCaptureCorner: () -> Unit = {}, onResetCalibration: () -> Unit = {}, onUseCalibration: () -> Unit = {},
-    onPointerBoardSize: (Int, Int, Double) -> Unit = { _, _, _ -> }, onOpenLocalDetail: () -> Unit = {}) {
+    onPointerBoardSize: (Int, Int, Double) -> Unit = { _, _, _ -> }) {
     BackHandler(onBack = onExit)
     var showHandTracking by rememberSaveable { mutableStateOf(true) }
     val pointer = state.sample.pointer
@@ -43,19 +43,19 @@ internal fun PracticeScreen(state: PracticeState, settings: NativeSettings, came
     Surface(Modifier.fillMaxSize()) {
         BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(16.dp)) {
             val wide = maxWidth > maxHeight
-            val feedbackHeight = maxHeight * .35f
             val cameraHeight = (maxHeight * if (wide) .45f else .20f).coerceIn(64.dp, if (wide) 200.dp else 160.dp)
             Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (wide) {
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         PracticeCameraPreview(state, showHandTracking,
                             Modifier.weight(1f).height(cameraHeight))
-                        PracticeLiveFeedback(state, settings, Modifier.weight(1f).heightIn(max = cameraHeight))
+                        PracticeLiveFeedback(state, settings, Modifier.weight(1f).then(
+                            if (settings.controlMode == ControlMode.POINTER) Modifier.heightIn(max = cameraHeight) else Modifier))
                     }
                 } else {
                     PracticeCameraPreview(state, showHandTracking,
                         Modifier.fillMaxWidth().height(cameraHeight))
-                    PracticeLiveFeedback(state, settings, Modifier.fillMaxWidth().heightIn(max = feedbackHeight))
+                    PracticeLiveFeedback(state, settings, Modifier.fillMaxWidth())
                 }
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -98,32 +98,22 @@ internal fun PracticeScreen(state: PracticeState, settings: NativeSettings, came
                         }
                     }
                     if (settings.controlMode == ControlMode.POINTER) {
-                        if (settings.poseActions.enabled) Text("Custom pose actions are inactive in Pointer mode.")
                         PointerPracticePanel(state.sample.pointer ?: PracticePointerSample(),
                             state.session == GestureSessionState.Active, onCaptureCorner, onResetCalibration,
                             onUseCalibration, onPointerBoardSize, openBoard = { focusedBoard = true })
                     } else {
-                    Text("Current mode: ${modeLabel(settings.mode)}${if (settings.inverted) " · motion direction reversed" else ""}")
-                    SampleFeed(state.sample, onOpenLocalDetail, state.session == GestureSessionState.Active,
-                        settings.poseActions.enabled && (settings.mode == GestureMode.POSE || settings.mode == GestureMode.HYBRID))
+                    Text("Current mode: ${modeLabel(settings.mode)}${if (settings.inverted) " · direction reversed" else ""}")
+                    SampleFeed(state.sample)
                     Text("Try a gesture", style = MaterialTheme.typography.titleMedium)
-                    if (settings.poseActions.enabled && (settings.mode == GestureMode.POSE || settings.mode == GestureMode.HYBRID)) {
-                        Text("Custom pose actions use your saved settings. One-shot actions run once per appearance; continuous actions move while the confirmed pose stays visible.")
-                        Text("The index + middle pose has its own action. A single-finger pose held long enough before changing is also a valid gesture.")
-                        if (settings.mode == GestureMode.HYBRID) Text("A pose with no action does not block flick or movement controls.")
-                    } else if (settings.mode == GestureMode.POSE || settings.mode == GestureMode.HYBRID) {
+                    if (settings.mode == GestureMode.POSE || settings.mode == GestureMode.HYBRID) {
                         Text("Point down for ${if (settings.inverted) "previous" else "next"}; point up for ${if (settings.inverted) "next" else "previous"}. Holding a pointing pose or thumbs-up can repeat after the saved rearm delay plus fresh confirmation.")
                         Text("Open hand: Tap video once. It toggles this sample's playback, while tracking stays on. A held open hand will not tap again, even after tracking loss. Show a different visible pose before another open-hand tap.")
                         Text("Thumbs-up: Double tap. This sample counts it; another app decides what a double tap does.")
                     }
-                    if (settings.poseActions.enabled && settings.mode != GestureMode.POSE && settings.mode != GestureMode.HYBRID)
-                        Text("Custom pose actions are inactive in this recognition mode.")
                     if (settings.mode == GestureMode.FLICK || settings.mode == GestureMode.HYBRID)
-                        Text("Flick your palm down or up to navigate, then settle it before repeating." +
-                            if (settings.mode == GestureMode.HYBRID && !settings.poseActions.enabled) " In Hybrid, curl your fingers and relax your thumb to avoid a pose tap." else "")
+                        Text("Flick your palm down or up to navigate, then settle it before repeating. In Hybrid, curl your fingers and relax your thumb to avoid a pose tap.")
                     if (settings.mode == GestureMode.CONTINUOUS || settings.mode == GestureMode.HYBRID)
-                        Text("Move your palm vertically to move the sample feed; hold still to stop." +
-                            if (settings.mode == GestureMode.HYBRID && !settings.poseActions.enabled) " In Hybrid, curl your fingers and relax your thumb. Poses and flicks take priority." else "")
+                        Text("Move your palm vertically to move the sample feed; hold still to stop. In Hybrid, curl your fingers and relax your thumb. Poses and flicks take priority.")
                     Text("Tap video changes playback. Stop practice releases the camera. Local movement is a demonstration; real feeds may respond differently.",
                         style = MaterialTheme.typography.bodyMedium)
                     }
@@ -175,7 +165,7 @@ private fun FocusedPointerPractice(sample: PracticePointerSample, stop: () -> Un
 @Composable
 private fun PracticeLiveFeedback(state: PracticeState, settings: NativeSettings, modifier: Modifier) {
     OutlinedCard(modifier) {
-        Column(Modifier.verticalScroll(rememberScrollState())
+        Column(Modifier.then(if (settings.controlMode == ControlMode.POINTER) Modifier.verticalScroll(rememberScrollState()) else Modifier)
             .padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("Live feedback", style = MaterialTheme.typography.titleMedium)
             Text(when (state.session) {
@@ -193,20 +183,7 @@ private fun PracticeLiveFeedback(state: PracticeState, settings: NativeSettings,
             Text("Last action: ${state.sample.lastAction}", style = MaterialTheme.typography.bodyMedium)
             Text("Confirmed actions: ${state.sample.actionCount} · Double taps: ${state.sample.doubleTaps}",
                 style = MaterialTheme.typography.bodyMedium)
-            if (settings.poseActions.enabled && (settings.mode == GestureMode.POSE || settings.mode == GestureMode.HYBRID)) {
-                Text("Pose: ${state.sample.customPose?.let(::poseIdLabel) ?: "Not recognized"}")
-                Text("Selected action: ${poseActionLabel(state.sample.selectedAction)}")
-                Text(state.sample.inactiveReason ?: when (state.sample.customPhase) {
-                    HandPosePhase.CONFIRMING -> "Hold steady · confirming"
-                    HandPosePhase.LATCHED -> "Pose confirmed"
-                    HandPosePhase.WAITING_REARM -> "Waiting for release"
-                    HandPosePhase.READY -> "Ready for a gesture"
-                })
-                if (state.sample.customPhase == HandPosePhase.CONFIRMING)
-                    LinearProgressIndicator(progress = { state.sample.customConfirmation.toFloat() },
-                        modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Pose confirmation progress" })
-                Text("Hold activations: ${state.sample.holdActivations}")
-            } else if (settings.mode == GestureMode.POSE || settings.mode == GestureMode.HYBRID) {
+            if (settings.mode == GestureMode.POSE || settings.mode == GestureMode.HYBRID) {
                 Text("Pose: ${poseLabel(state.sample.pose)}", style = MaterialTheme.typography.bodyMedium)
                 Text(when (state.sample.phase) {
                     HandPosePhase.CONFIRMING -> "Hold steady · confirming"
@@ -219,7 +196,7 @@ private fun PracticeLiveFeedback(state: PracticeState, settings: NativeSettings,
                     LinearProgressIndicator(progress = { state.sample.confirmation.toFloat() },
                         modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Pose confirmation progress" })
             }
-            if (state.sample.velocity != 0.0 && !settings.poseActions.enabled) Text("Feed moves while your palm moves. Hold still to stop.",
+            if (state.sample.velocity != 0.0) Text("Feed moves while your palm moves. Hold still to stop.",
                 style = MaterialTheme.typography.bodyMedium)
             }
         }
@@ -227,17 +204,7 @@ private fun PracticeLiveFeedback(state: PracticeState, settings: NativeSettings,
 }
 
 @Composable
-private fun SampleFeed(sample: PracticeSample, openDetail: () -> Unit, canOpenDetail: Boolean, showBackSample: Boolean) {
-    if (showBackSample) {
-    OutlinedCard(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(if (sample.localDetailOpen) "Sample detail" else "Sample list", style = MaterialTheme.typography.titleMedium)
-            Text(if (sample.localDetailOpen) "Use a mapped Back pose to return to the sample list." else "Open a local detail to try a mapped Back pose.")
-            if (!sample.localDetailOpen) TextButton(onClick = openDetail, enabled = canOpenDetail,
-                modifier = Modifier.heightIn(min = 48.dp)) { Text("Open sample detail") }
-        }
-    }
-    }
+private fun SampleFeed(sample: PracticeSample) {
     Text("Sample feed · item ${(sample.position.roundToInt() + 1).coerceIn(1, 5)} of 5",
         style = MaterialTheme.typography.titleMedium)
     val cardHeight = 208.dp

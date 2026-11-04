@@ -17,7 +17,7 @@ never restart automatically. Normal tracking needs explicit Home Start/Resume.
 Local feedback proves neither physical recognition accuracy nor another feed's
 response; record those as separate trials.
 
-## Legacy trial matrix (custom pose actions off)
+## Trial matrix
 
 | Group | Trials / expected evidence |
 | --- | --- |
@@ -39,26 +39,6 @@ response; record those as separate trials.
 | Recovery |force-stop/relaunch -> Stopped; process kill -> no automatic camera restart; visible explicit restart |
 
 At least a limited-performance device and a newer device should be tested when available. Cover Android26-29,30-33,34-36, including at least one vendor with aggressive battery controls. Never mark unavailable devices/API levels passed.
-
-## Custom pose actions acceptance
-
-These are proposed trials, not measured results. Enable custom actions, Apply,
-then explicitly Start; run direction and finger profiles separately. Confirm the
-three independent finger bindings and the shared open/fist/thumbs-up poses, and
-verify NONE leaves HYBRID flick/movement available. Observe real target changes;
-Back ACCEPTED and swipe completion alone do not prove navigation.
-
-| Trial | Evidence to collect |
-| --- | --- |
-| Pose accuracy | 20 appearances per canonical pose, per hand and profile; record confusion matrix, false triggers, lighting, distance and latency. Proposed target: at least 18/20 correct. |
-| Transitions | 20 changes per confusable pair, including each single finger ↔ both; test confirmation and that held output stops before a new pose triggers. |
-| Hold/release | Hold discrete and continuous poses for 10 seconds, test loss/reacquisition, and measure last submission and remaining 100ms segment after release. Confirm discrete Back fires at most once per appearance. |
-| Safety/lifecycle | Test target switches including A→B→A, lock, overlay interaction, stale callbacks, Pause/Stop and permissions; no new action after invalidation and no backlog. |
-| Target applications | Check one-shot scroll, continuous, taps and Back in at least two real apps. Measure whether provisional 300 px/s short swipes cross touch slop and tune only from observed evidence. |
-| Sustained / coverage | 15 minutes with thermal/battery/FPS and fatigue; multiple hands, lighting, orientations, API 26–29/30–33/34–36 and OEMs when available. |
-
-The current implementation receipt marks physical hand accuracy, real-app behavior,
-continuous calibration and sustained/OEM coverage as SKIPPED until observed.
 
 ## Pointer acceptance
 

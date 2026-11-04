@@ -8,10 +8,10 @@ CameraX ImageAnalysis (front, KEEP_ONLY_LATEST)
   -> MediaPipe HandLandmarker VIDEO (one hand, existing model)
   -> 21 indexed normalized domain landmarks (mirrored x)
   -> main-thread SessionRecognition (saved Scroll or Pointer, exclusively)
-  -> Scroll: GestureCoordinator -> PoseActionResolver -> ScrollActionCoordinator
+  -> Scroll: GestureCoordinator -> ScrollActionCoordinator
      Pointer: PointerDetector -> pixel mapping / cursor -> PointerContactCoordinator
   -> AccessibilityScrollAdapter (shared platform ownership)
-  -> public AccessibilityService.dispatchGesture / performGlobalAction (Back)
+  -> public AccessibilityService.dispatchGesture
 ```
 
 Gesture recognition is deterministic with explicit timestamps. Detectors never dispatch touches, know CameraX types or call Compose. The application owns a single SessionStore with StateFlow and immutable settings. LifecycleService owns external tracking; the Activity owns isolated practice. Compose observes state and sends commands. A lightweight WindowManager view keeps the overlay independent of Activity destruction. Constructor injection supplies camera callbacks and the scrolling executor/clock; no DI framework is required.
@@ -28,9 +28,7 @@ Android may terminate a service/process; this implementation does not promise pe
 
 Gestures → Practice safely reuses CameraController and GestureCoordinator with a
 saved NativeSettings snapshot. PracticeFeedback maps decisions and velocity into
-five local sample cards, a playback toggle, double-tap count and local Back navigation.
-Custom held scrolling updates only the sample, and the same resolver determines
-pose actions. Unsaved drafts must be applied or discarded before entry. It never creates
+five local sample cards, a playback toggle and double-tap count. It never creates
 ScrollActionCoordinator, AccessibilityScrollAdapter or an external executor.
 Movement is a local demonstration, not target-feed calibration.
 
@@ -81,30 +79,9 @@ Each ImageProxy closes once in finally. Initialization, inference, and disposal 
 
 ## Gesture arbitration and external actions
 
-With custom pose actions off, HYBRID and POSE include the native tap extension; CONTINUOUS and FLICK isolate their movement detectors. Pose/flick candidate, latch and cooldown ownership suppress competitors. Suppression resets continuous history. Native pose rearming uses elapsed time only, with a 200–3000ms Settings slider (default 450ms). After the interval, fresh confirmation permits another action, including held pointing/thumbs-up poses and direct up/down changes. Open hand (`NEUTRAL`) sends one pause tap per presentation and suppresses movement while held; its tap debounce survives tracking loss and clears on a recognized non-open pose. It never releases the timer. A vertically extended thumb with the other four fingers curled sends a double tap. Tracking loss discards candidates, while valid monotonic timestamps can expire the timer without a hand. The original open-hand/stable-pose rearm remains available with `tapGesturesEnabled=false` for the unchanged Dart compatibility fixtures.
+HYBRID and POSE include the native tap extension; CONTINUOUS and FLICK isolate their movement detectors. Pose/flick candidate, latch and cooldown ownership suppress competitors. Suppression resets continuous history. Native pose rearming uses elapsed time only, with a 200–3000ms Settings slider (default 450ms). After the interval, fresh confirmation permits another action, including held pointing/thumbs-up poses and direct up/down changes. Open hand (`NEUTRAL`) sends one pause tap per presentation and suppresses movement while held; its tap debounce survives tracking loss and clears on a recognized non-open pose. It never releases the timer. A vertically extended thumb with the other four fingers curled sends a double tap. Tracking loss discards candidates, while valid monotonic timestamps can expire the timer without a hand. The original open-hand/stable-pose rearm remains available with `tapGesturesEnabled=false` for the unchanged Dart compatibility fixtures.
 
-In the legacy path, down pose/flick -> forward; up -> backward; inversion applies once and does not affect taps. Continuous motion uses the same velocity/sensitivity/EMA mapping, rendered as bounded 100ms proportional touchscreen strokes. This is an intentional adapter difference from Flutter's per-frame ListView ticker: small strokes can be below another app's touch threshold. Taps use the content center and 50ms stationary strokes; double tap is two sequential strokes in one dispatch, separated by up to 100ms within Android's double-tap timeout. No delayed backlog of actions is retained. Busy, stale, inactive, disconnected, locked, system and own-app targets reject all output, including taps. The overlay's actual bounds are excluded from the gesture path; center taps use a clear column if the widget occupies the center.
-
-With custom actions enabled in Scroll POSE/HYBRID, the recognition snapshot
-selects one exclusive direction/finger profile and shared open, closed and thumbs-up
-poses. The resolver maps confirmed poses to discrete actions or a held direction;
-NONE does not claim HYBRID motion/flick ownership. Chosen custom scroll directions
-are final; reversal still applies to legacy and movement/flick paths. Binding
-snapshots are immutable, and preference decoding falls back per field. An unsupported
-future version disables custom use while preserving its raw keys on unrelated updates.
-
-The coordinator owns one operation and drops busy samples. Held pose scrolling
-uses 100ms segments and a provisional shared 300 px/s speed. A watchdog polled at
-250ms invalidates held output and recognition evidence after the lesser of the
-350ms stale limit and 250ms maximum gap. Target identity and generation are checked
-before dispatch, including an A→B→A change; observed target events can lag the real
-foreground window and generation does not atomically verify the OS screen. Switching
-target stops held output and does not rearm a discrete pose without valid release. Pause, Stop, loss, invalid
-pose, overlay and safety guards reject new output. An already submitted segment
-may complete. A held-generation check before executor submission prevents a queued
-old stroke from being revived by a later hold. Back shares those guards and invokes
-the public Android global action;
-ACCEPTED is not evidence of navigation and is distinct from touch COMPLETED.
+Down pose/flick -> forward; up -> backward; inversion applies once and does not affect taps. Continuous motion uses the same velocity/sensitivity/EMA mapping, rendered as bounded 100ms proportional touchscreen strokes. This is an intentional adapter difference from Flutter's per-frame ListView ticker: small strokes can be below another app's touch threshold. Taps use the content center and 50ms stationary strokes; double tap is two sequential strokes in one dispatch, separated by up to 100ms within Android's double-tap timeout. No delayed backlog of actions is retained. Busy, stale, inactive, disconnected, locked, system and own-app targets reject all output, including taps. The overlay's actual bounds are excluded from the gesture path; center taps use a clear column if the widget occupies the center.
 
 Every overlay press/drag suppresses recognition dispatch and resets recognition evidence. Floating controls contain status, Pause, Stop and Open app; resuming requires Home. Camera-free external tests in Settings → Advanced run only when Stopped: one explicit action after the task backgrounds. They are separate from safe local practice. Swipe API completion and observed feed navigation are separate results.
 

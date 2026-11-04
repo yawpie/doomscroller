@@ -47,7 +47,6 @@ class PointerDispatchTest {
             val adapter = AccessibilityScrollAdapter()
             begin(adapter, surface.start)
             assertEquals(ScrollExecutionResult.BUSY, adapter.execute(ScrollRequest(ScrollAction.SINGLE_TAP)))
-            assertEquals(ScrollExecutionResult.BUSY, adapter.execute(ScrollRequest(ScrollAction.BACK)))
             for (fraction in listOf(.25, .5)) {
                 val point = interpolate(surface.start, surface.drop, fraction)
                 instrumentation.runOnMainSync { adapter.movePointer(sample(point)) }

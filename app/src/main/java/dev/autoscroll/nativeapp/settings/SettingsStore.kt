@@ -10,18 +10,6 @@ class SettingsStore(context: Context) {
     private val preferences = context.getSharedPreferences("gesture_settings", Context.MODE_PRIVATE)
     private fun number(key: String, fallback: Double) =
         preferences.getString(key, null)?.toDoubleOrNull()?.takeIf { it.isFinite() } ?: fallback
-    private fun readPoseActions(): PoseActions {
-        val values = preferences.all
-        val version = values["poseActions.version"]
-        if (version != null && version != 1) return PoseActions()
-        val defaults = PoseActions()
-        val profile = PoseRecognitionProfile.entries.firstOrNull { it.id == values["poseActions.profile"] } ?: defaults.profile
-        val bindings = PoseId.entries.associateWith { pose ->
-            PoseAction.entries.firstOrNull { it.id == values["poseActions.binding.${pose.id}.action"] }
-                ?: defaults.bindings.getValue(pose)
-        }
-        return PoseActions(values["poseActions.enabled"] as? Boolean ?: false, profile, bindings)
-    }
     private val mutable = MutableStateFlow(runCatching {
         NativeSettings(
             controlMode = controlModeFromPreference(preferences.getString("controlMode", null)),
@@ -59,7 +47,7 @@ class SettingsStore(context: Context) {
             FlickDetector(it.flick)
             HandPoseDetector(it.pose)
         }
-    }.getOrDefault(NativeSettings()).copy(poseActions = readPoseActions()))
+    }.getOrDefault(NativeSettings()))
     val state = mutable.asStateFlow()
     var accessibilityConsent: Boolean
         get() = preferences.getBoolean("accessibilityConsent", false)
@@ -71,17 +59,8 @@ class SettingsStore(context: Context) {
     fun update(settings: NativeSettings) {
         require(settings.swipeDurationMs in 100..1000 && settings.swipeDistance in 0.1..0.8)
         require(settings.pose.cooldownMs in 200..3000)
-        val poseActionsChanged = settings.poseActions != mutable.value.poseActions
         mutable.value = settings
         preferences.edit().apply {
-            if (poseActionsChanged) {
-                putInt("poseActions.version", 1)
-                putBoolean("poseActions.enabled", settings.poseActions.enabled)
-                putString("poseActions.profile", settings.poseActions.profile.id)
-                settings.poseActions.bindings.forEach { (pose, action) ->
-                    putString("poseActions.binding.${pose.id}.action", action.id)
-                }
-            }
             putString("controlMode", settings.controlMode.name)
             putString("mode", settings.mode.name)
             putBoolean("inverted", settings.inverted)

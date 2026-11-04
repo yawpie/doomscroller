@@ -1,7 +1,10 @@
 package dev.autoscroll.nativeapp.scrolling
 
-import dev.autoscroll.nativeapp.gesture.*
-import dev.autoscroll.nativeapp.settings.NativeSettings
+import dev.autoscroll.nativeapp.gesture.FlickDirection
+import dev.autoscroll.nativeapp.gesture.FlickScrollAction
+import dev.autoscroll.nativeapp.gesture.GestureDecision
+import dev.autoscroll.nativeapp.gesture.RecognizedHandPose
+import dev.autoscroll.nativeapp.gesture.ScrollConfig
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -30,10 +33,6 @@ class ScrollActionCoordinator(
     private var lastDiscreteTimestamp = Long.MIN_VALUE
     private var previousMotionTimestamp: Long? = null
     private var velocity = 0.0
-    private var settings: NativeSettings? = null
-    private var lastCustomTimestamp: Long? = null
-    private var poseHolding = false
-    private var holdGeneration = 0L
 
     fun setSessionActive(active: Boolean) {
         if (active == state.value.sessionActive) return
@@ -43,64 +42,35 @@ class ScrollActionCoordinator(
         mutableState.value = state.value.copy(sessionActive = active, rejectionReason = null)
     }
 
-    fun configure(config: ScrollConfig = this.config, inverted: Boolean = this.inverted, settings: NativeSettings? = null) {
+    fun configure(config: ScrollConfig = this.config, inverted: Boolean = this.inverted) {
         resetPending()
         this.config = config
         this.inverted = inverted
-        this.settings = settings
-        lastCustomTimestamp = null
         mapper = ScrollVelocityMapper(config).also { it.configure(inverted = inverted) }
         sessionStartedAt = if (state.value.sessionActive) clockMs() else Long.MAX_VALUE
         lastDiscreteTimestamp = Long.MIN_VALUE
     }
 
     /** nowMs is the monotonic timestamp of the inference sample, not its callback delivery time. */
-    fun process(decision: GestureDecision, nowMs: Long = clockMs(), expectedTargetPackage: String? = null,
-        expectedTargetGeneration: Long? = null) {
-        val custom = decision.customPose
-        if (custom != null && settings != null) {
-            val previous = lastCustomTimestamp
-            if (!fresh(nowMs) || custom.timestampMs != nowMs || previous != null && nowMs <= previous) {
-                stopContinuous()
-                return reject("Stale or out-of-order pose sample")
-            }
-            lastCustomTimestamp = nowMs
-            val mapped = custom.event?.let { PoseActionResolver.custom(it, settings!!) }
-            if (mapped != null && mapped != PoseAction.NONE) {
-                stopContinuous()
-                val action = screenAction(mapped) ?: return
-                lastDiscreteTimestamp = nowMs
-                return dispatch(ScrollRequest(action, expectedTargetPackage = expectedTargetPackage,
-                    expectedTargetGeneration = expectedTargetGeneration), nowMs)
-            }
-            val held = custom.held?.let { PoseActionResolver.custom(it, settings!!) }
-            val heldVelocity = held?.let(PoseActionResolver::holdVelocity) ?: 0.0
-            if (heldVelocity != 0.0) {
-                poseHolding = true
-                velocity = heldVelocity
-                mutableState.value = state.value.copy(continuousPixelsPerSecond = velocity)
-                return dispatch(ScrollRequest(if (velocity > 0) ScrollAction.FORWARD else ScrollAction.BACKWARD,
-                    abs(velocity) * CONTINUOUS_DURATION_MS / 1000.0, CONTINUOUS_DURATION_MS,
-                    expectedTargetPackage, expectedTargetGeneration), nowMs, holdGeneration = holdGeneration)
-            }
-            if (poseHolding) stopContinuous()
-        }
+    fun process(decision: GestureDecision, nowMs: Long = clockMs()) {
         val pose = decision.pose
         val flick = decision.flick
         if (pose != null || flick != null) {
             stopContinuous()
-            val resolved = if (pose != null) PoseActionResolver.legacy(pose.pose, inverted)
-                else PoseActionResolver.flick(flick!!.direction, inverted)
-            val action = screenAction(resolved) ?: return reject("Pose has no screen action")
+            val action = if (pose != null) when (pose.pose) {
+                RecognizedHandPose.POINTING_DOWN -> direction(true)
+                RecognizedHandPose.POINTING_UP -> direction(false)
+                RecognizedHandPose.NEUTRAL -> ScrollAction.SINGLE_TAP
+                RecognizedHandPose.THUMBS_UP -> ScrollAction.DOUBLE_TAP
+                else -> return reject("Pose has no screen action")
+            } else direction(flick!!.direction == FlickDirection.DOWN)
             val timestamp = pose?.timestampMs ?: flick!!.timestampMs
             if (timestamp > clockMs()) return reject("Gesture timestamp is in the future")
             if (timestamp <= lastDiscreteTimestamp) return reject("Duplicate or out-of-order gesture")
             lastDiscreteTimestamp = timestamp
             val distance = if (pose == null && config.flickAction == FlickScrollAction.FAST_SCROLL)
                 config.flickScrollDistance else null
-            val request = if (action.isTap) ScrollRequest(action, expectedTargetPackage = expectedTargetPackage,
-                expectedTargetGeneration = expectedTargetGeneration)
-                else ScrollRequest(action, distance, config.flickDurationMs, expectedTargetPackage, expectedTargetGeneration)
+            val request = if (action.isTap) ScrollRequest(action) else ScrollRequest(action, distance, config.flickDurationMs)
             dispatch(request, timestamp)
             return
         }
@@ -121,8 +91,7 @@ class ScrollActionCoordinator(
         mutableState.value = state.value.copy(continuousPixelsPerSecond = velocity)
         // ponytail: short swipes approximate continuous pixel movement; calibrate touch slop on real targets.
         dispatch(ScrollRequest(if (velocity > 0) ScrollAction.FORWARD else ScrollAction.BACKWARD,
-            abs(velocity) * CONTINUOUS_DURATION_MS / 1000.0, CONTINUOUS_DURATION_MS, expectedTargetPackage,
-            expectedTargetGeneration), nowMs)
+            abs(velocity) * CONTINUOUS_DURATION_MS / 1000.0, CONTINUOUS_DURATION_MS), nowMs)
     }
 
     fun manual(action: ScrollAction) {
@@ -130,23 +99,15 @@ class ScrollActionCoordinator(
         dispatch(ScrollRequest(action), clockMs(), manual = true)
     }
 
-    private fun screenAction(action: PoseAction): ScrollAction? = when (action) {
-        PoseAction.NEXT_ITEM -> ScrollAction.FORWARD
-        PoseAction.PREVIOUS_ITEM -> ScrollAction.BACKWARD
-        PoseAction.SINGLE_TAP -> ScrollAction.SINGLE_TAP
-        PoseAction.DOUBLE_TAP -> ScrollAction.DOUBLE_TAP
-        PoseAction.BACK -> ScrollAction.BACK
-        else -> null
-    }
-
-    fun invalidate() { resetPending(); lastCustomTimestamp = null; sessionStartedAt = clockMs() + 1 }
+    private fun direction(down: Boolean): ScrollAction =
+        if (down != inverted) ScrollAction.FORWARD else ScrollAction.BACKWARD
 
     private fun fresh(timestamp: Long): Boolean {
         val current = clockMs()
         return timestamp >= sessionStartedAt && timestamp <= current && current - timestamp <= config.staleAfterMs
     }
 
-    private fun dispatch(request: ScrollRequest, timestamp: Long, manual: Boolean = false, holdGeneration: Long? = null) {
+    private fun dispatch(request: ScrollRequest, timestamp: Long, manual: Boolean = false) {
         if (!state.value.sessionActive) return reject("Session is paused or stopped")
         if (!fresh(timestamp)) return reject("Stale gesture or previous session")
         if (operation?.isActive == true) return reject("Screen action already in progress")
@@ -154,10 +115,6 @@ class ScrollActionCoordinator(
         val token = generation
         operation = scope.launch(start = CoroutineStart.LAZY) {
             if (token != generation || !state.value.sessionActive) return@launch
-            if (holdGeneration != null && (!poseHolding || holdGeneration != this@ScrollActionCoordinator.holdGeneration)) {
-                operation = null
-                return@launch
-            }
             if (!fresh(timestamp)) {
                 operation = null
                 reject("Stale gesture before dispatch")
@@ -169,7 +126,7 @@ class ScrollActionCoordinator(
             try {
                 val result = executor.execute(request)
                 if (token == generation) mutableState.value = state.value.copy(lastResult = result,
-                    rejectionReason = if (result == ScrollExecutionResult.COMPLETED || result == ScrollExecutionResult.ACCEPTED) null else result.name)
+                    rejectionReason = if (result == ScrollExecutionResult.COMPLETED) null else result.name)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
@@ -187,8 +144,6 @@ class ScrollActionCoordinator(
     }
 
     private fun stopContinuous() {
-        poseHolding = false
-        holdGeneration++
         velocity = 0.0
         previousMotionTimestamp = null
         mutableState.value = state.value.copy(continuousPixelsPerSecond = 0.0)

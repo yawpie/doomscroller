@@ -23,7 +23,6 @@ internal data class SwipeBounds(val left: Int, val top: Int, val width: Int, val
 internal data class SwipeCoordinates(val x: Float, val startY: Float, val endY: Float, val durationMs: Long)
 
 internal fun swipeCoordinates(config: SwipeConfig, bounds: SwipeBounds, request: ScrollRequest): SwipeCoordinates {
-    require(request.action != ScrollAction.BACK)
     if (request.action.isTap) {
         val x = bounds.left + bounds.width * 0.5f
         val y = bounds.top + bounds.height * 0.5f

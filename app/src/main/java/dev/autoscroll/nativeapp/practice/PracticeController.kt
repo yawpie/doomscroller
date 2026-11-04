@@ -50,13 +50,6 @@ internal class PracticeController(
     private var pointerTargetPixels = 0.0
     val calibratedArea: PointerArea? get() = feedback?.pointer?.calibration?.area
 
-    fun openLocalDetail() {
-        feedback?.let { local ->
-            local.openLocalDetail()
-            mutableState.value = mutableState.value.copy(sample = local.state)
-        }
-    }
-
     fun capturePointerCorner() {
         if (machine.state != GestureSessionState.Active) return
         feedback?.let { local ->

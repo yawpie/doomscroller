@@ -43,20 +43,11 @@ Camera denial explains retry or App info access. Floating controls and notificat
 are optional in Scroll; Skip floating controls saves the existing overlay preference as off.
 Start on Home and wait for Tracking before switching to a feed.
 
-With custom pose actions off (the default), HYBRID/POSE retain the legacy
-pointing, open-hand tap and thumbs-up behavior, including their existing rearm
-rules. CONTINUOUS/FLICK retain movement controls. To configure poses, enable
-Settings → Hand pose actions, choose Pointing directions or Finger combinations,
-then choose an action for each pose. Direction and finger profiles are exclusive;
-open hand, closed hand and thumbs-up are shared. The three finger combinations
-(index only, middle only, index and middle together) have independent bindings.
-Custom actions include one swipe, center tap, double tap, Android Back and scrolling
-while a pose is held. NONE sends no pose action; HYBRID may still use flick/movement.
-Custom mappings work in Scroll with POSE/HYBRID, not Pointer, FLICK or CONTINUOUS.
-Reverse direction affects legacy pointing and movement/flick, not selected custom
-pose directions. Gestures describes saved settings; apply or discard an unsaved
-draft before entering Practice. Reset pose actions changes only that draft group.
-
+HYBRID/POSE: point down/up to navigate, show an open hand for one single tap per
+presentation, or show thumbs-up for double tap. Pointing/thumbs-up repeat after the
+configured rearm delay and fresh confirmation. CONTINUOUS/FLICK preserve their
+movement controls. The illustrated cards in Gestures explain the current mode and
+repeats. Tap video sends a center tap; Pause tracking releases the camera.
 Gestures → Practice safely uses saved recognition settings with a local sample
 feed and live feedback. A mirrored camera preview and live feedback stay pinned
 while the controls, sample feed and instructions scroll. Show hand tracking toggles
@@ -66,8 +57,7 @@ It needs camera access only. Start practice is explicit;
 entry pauses external tracking and cancels pending manual tests. Leaving, locking,
 backgrounding or recreation releases its camera and never restarts it automatically.
 Return to Home and press Start / Resume to control another app again. Practice
-does not create an accessibility action adapter or send external swipes, taps or Back.
-Back in Practice acts only on its local sample navigation.
+does not create an accessibility action adapter or send any external swipe or tap.
 The screen stays awake while Practice is open, including the focused pointer board;
 leaving Practice restores the normal screen timeout.
 Settings → Control mode selects Scroll (the existing default) or Pointer. Apply
@@ -119,7 +109,6 @@ status, Pause, Stop and Open app; resume always needs an explicit press in Home.
 - [Permissions](docs/permissions.md)
 - [Physical-device trials](docs/device-validation.md)
 - [Pointer implementation and validation receipt](docs/pointer-validation.md)
-- [Custom pose actions validation receipt](docs/custom-pose-actions-validation.md)
 - [Prior independent QA review](docs/qa-review.md)
 
 No recording, frame upload, backend, analytics, runtime model download or network
