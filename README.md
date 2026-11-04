@@ -53,6 +53,15 @@ open hand, closed hand and thumbs-up are shared. The three finger combinations
 Custom actions include one swipe, center tap, double tap, Android Back and scrolling
 while a pose is held. NONE sends no pose action; HYBRID may still use flick/movement.
 Custom mappings work in Scroll with POSE/HYBRID, not Pointer, FLICK or CONTINUOUS.
+For horizontal scrolling, choose any pose and assign **Scroll left once** or
+**Scroll right once**, then Apply changes. For example, bind Point left to Scroll
+left once and Point right to Scroll right once in the Pointing directions profile.
+Each confirmed appearance sends one swipe; release the pose before repeating.
+Left/right describes content navigation: left swipes the finger right, and right
+swipes the finger left. Distance uses the saved screen-distance fraction of the
+content width, and duration uses the saved swipe duration. Practice shows a separate
+five-page horizontal sample; external apps decide whether the swipe scrolls or
+performs another action.
 Reverse direction affects legacy pointing and movement/flick, not selected custom
 pose directions. Gestures describes saved settings; apply or discard an unsaved
 draft before entering Practice. Reset pose actions changes only that draft group.

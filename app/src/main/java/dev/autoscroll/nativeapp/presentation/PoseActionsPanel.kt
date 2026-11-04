@@ -24,12 +24,15 @@ internal fun poseIdLabel(pose: PoseId) = when (pose) {
 internal fun poseActionLabel(action: PoseAction) = when (action) {
     PoseAction.NONE -> "No action"; PoseAction.NEXT_ITEM -> "Scroll next once"
     PoseAction.PREVIOUS_ITEM -> "Scroll previous once"; PoseAction.SINGLE_TAP -> "Single tap"
+    PoseAction.SCROLL_LEFT -> "Scroll left once"; PoseAction.SCROLL_RIGHT -> "Scroll right once"
     PoseAction.DOUBLE_TAP -> "Double tap"; PoseAction.BACK -> "Back"
     PoseAction.CONTINUOUS_NEXT -> "Scroll next while held"; PoseAction.CONTINUOUS_PREVIOUS -> "Scroll previous while held"
 }
 private fun actionDescription(action: PoseAction) = when (action) {
     PoseAction.NONE -> "No pose action. In Hybrid, flick and movement can still work."
     PoseAction.NEXT_ITEM, PoseAction.PREVIOUS_ITEM -> "One vertical swipe per appearance."
+    PoseAction.SCROLL_LEFT -> "View content to the left with one rightward swipe per appearance."
+    PoseAction.SCROLL_RIGHT -> "View content to the right with one leftward swipe per appearance."
     PoseAction.SINGLE_TAP -> "One tap at the center of the content."
     PoseAction.DOUBLE_TAP -> "Two taps at the center; the target decides the result."
     PoseAction.BACK -> "Return to the previous screen, not the previous feed item."

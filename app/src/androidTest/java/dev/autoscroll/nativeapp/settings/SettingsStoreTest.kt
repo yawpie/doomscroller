@@ -56,6 +56,8 @@ class SettingsStoreTest {
                 .withBinding(PoseId.INDEX_ONLY, PoseAction.BACK)
                 .withBinding(PoseId.MIDDLE_ONLY, PoseAction.NEXT_ITEM)
                 .withBinding(PoseId.INDEX_MIDDLE, PoseAction.CONTINUOUS_PREVIOUS)
+                .withBinding(PoseId.POINTING_LEFT, PoseAction.SCROLL_LEFT)
+                .withBinding(PoseId.POINTING_RIGHT, PoseAction.SCROLL_RIGHT)
             val store = SettingsStore(context)
             store.update(original.copy(poseActions = actions))
             assertEquals(actions, SettingsStore(context).state.value.poseActions)

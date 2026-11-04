@@ -11,6 +11,39 @@ import org.junit.Test
 class SwipeConfigTest {
     private val bounds = SwipeBounds(10, 40, 400, 800)
 
+    @Test fun horizontalNavigationUsesWidthAndOppositeFingerDirection() {
+        val right = swipeCoordinates(SwipeConfig(), bounds, ScrollRequest(ScrollAction.RIGHT))
+        assertEquals(310f, right.x)
+        assertEquals(110f, right.endX)
+        assertEquals(440f, right.startY)
+        assertEquals(right.startY, right.endY)
+        assertEquals(220L, right.durationMs)
+        val left = swipeCoordinates(SwipeConfig(), bounds, ScrollRequest(ScrollAction.LEFT))
+        assertEquals(right.x, left.endX)
+        assertEquals(right.endX, left.x)
+        val short = swipeCoordinates(SwipeConfig(), bounds, ScrollRequest(ScrollAction.RIGHT, 24.0, 100))
+        assertEquals(24f, short.x - short.endX)
+        assertEquals(100L, short.durationMs)
+        val clamped = swipeCoordinates(SwipeConfig(), bounds, ScrollRequest(ScrollAction.LEFT, 2000.0))
+        assertEquals(200f, clamped.endX - clamped.x)
+    }
+
+    @Test fun horizontalOverlayAvoidanceMovesBothEndpointsToAClearRowOrRejects() {
+        for (action in listOf(ScrollAction.LEFT, ScrollAction.RIGHT)) {
+            val coordinates = swipeCoordinates(SwipeConfig(), bounds, ScrollRequest(action))
+            val overlay = SwipeBounds(170, 400, 90, 80)
+            val clear = avoidOverlay(coordinates, bounds, overlay)!!
+            assertTrue(clear.startY < overlay.top - 12 || clear.startY > overlay.top + overlay.height + 12)
+            assertEquals(clear.startY, clear.endY)
+            assertEquals(coordinates.x, clear.x)
+            assertEquals(coordinates.endX, clear.endX)
+            assertEquals(coordinates, avoidOverlay(coordinates, bounds, null))
+            assertEquals(coordinates, avoidOverlay(coordinates, bounds, SwipeBounds(350, 400, 40, 80)))
+            assertEquals(coordinates, avoidOverlay(coordinates, bounds, SwipeBounds(170, 700, 90, 80)))
+            assertNull(avoidOverlay(coordinates, bounds, SwipeBounds(170, 0, 90, 900)))
+        }
+    }
+
     @Test fun backCannotBecomeATouchAndTargetMustBeSpecifiedUnambiguously() {
         org.junit.Assert.assertThrows(IllegalArgumentException::class.java) { ScrollRequest(ScrollAction.BACK, 1.0) }
         org.junit.Assert.assertThrows(IllegalArgumentException::class.java) { ScrollRequest(ScrollAction.BACK, durationMs = 100) }
@@ -45,6 +78,7 @@ class SwipeConfigTest {
             assertEquals(50L, coordinates.durationMs)
             val overlay = SwipeBounds(170, 400, 90, 80)
             val clear = avoidOverlay(coordinates, bounds, overlay)!!
+            assertEquals(clear.x, clear.endX)
             assertTrue(clear.x < overlay.left || clear.x > overlay.left + overlay.width)
             assertNull(avoidOverlay(coordinates, bounds, SwipeBounds(0, 400, 450, 80)))
             org.junit.Assert.assertThrows(IllegalArgumentException::class.java) { ScrollRequest(action, 10.0) }
@@ -87,6 +121,7 @@ class SwipeConfigTest {
         val coordinates = swipeCoordinates(SwipeConfig(), bounds, ScrollRequest(ScrollAction.FORWARD))
         val centerWidget = SwipeBounds(170, 300, 90, 150)
         val adjusted = avoidOverlay(coordinates, bounds, centerWidget)!!
+        assertEquals(adjusted.x, adjusted.endX)
         assertTrue(adjusted.x < centerWidget.left || adjusted.x > centerWidget.left + centerWidget.width)
         assertEquals(coordinates.startY, adjusted.startY)
         assertEquals(coordinates.endY, adjusted.endY)

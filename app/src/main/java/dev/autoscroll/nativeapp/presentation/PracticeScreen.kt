@@ -229,6 +229,16 @@ private fun PracticeLiveFeedback(state: PracticeState, settings: NativeSettings,
 @Composable
 private fun SampleFeed(sample: PracticeSample, openDetail: () -> Unit, canOpenDetail: Boolean, showBackSample: Boolean) {
     if (showBackSample) {
+    Text("Horizontal sample · page ${sample.horizontalPosition + 1} of 5", style = MaterialTheme.typography.titleMedium)
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        repeat(5) { index ->
+            Surface(Modifier.weight(1f).heightIn(min = 48.dp),
+                color = if (index == sample.horizontalPosition) MaterialTheme.colorScheme.primaryContainer
+                    else MaterialTheme.colorScheme.surfaceVariant) {
+                Box(contentAlignment = Alignment.Center) { Text("${index + 1}") }
+            }
+        }
+    }
     OutlinedCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(if (sample.localDetailOpen) "Sample detail" else "Sample list", style = MaterialTheme.typography.titleMedium)
