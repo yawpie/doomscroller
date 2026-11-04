@@ -41,6 +41,8 @@ class PoseActions(
             when (it) {
                 PoseId.POINTING_UP -> PoseAction.PREVIOUS_ITEM
                 PoseId.POINTING_DOWN -> PoseAction.NEXT_ITEM
+                PoseId.POINTING_LEFT -> PoseAction.SCROLL_LEFT
+                PoseId.POINTING_RIGHT -> PoseAction.SCROLL_RIGHT
                 PoseId.OPEN_HAND -> PoseAction.SINGLE_TAP
                 PoseId.THUMBS_UP -> PoseAction.DOUBLE_TAP
                 else -> PoseAction.NONE

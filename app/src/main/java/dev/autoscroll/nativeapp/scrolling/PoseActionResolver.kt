@@ -21,6 +21,8 @@ object PoseActionResolver {
     fun legacy(pose: RecognizedHandPose, inverted: Boolean): PoseAction = when (pose) {
         RecognizedHandPose.POINTING_DOWN -> direction(true, inverted)
         RecognizedHandPose.POINTING_UP -> direction(false, inverted)
+        RecognizedHandPose.POINTING_LEFT -> PoseAction.SCROLL_LEFT
+        RecognizedHandPose.POINTING_RIGHT -> PoseAction.SCROLL_RIGHT
         RecognizedHandPose.NEUTRAL -> PoseAction.SINGLE_TAP
         RecognizedHandPose.THUMBS_UP -> PoseAction.DOUBLE_TAP
         else -> PoseAction.NONE

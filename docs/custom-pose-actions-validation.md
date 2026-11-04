@@ -68,3 +68,87 @@ Those instrumented cases have not been executed for this change. Visual checks f
 large text, themes, rotation and permission flows, real-hand recognition and actual
 horizontal target-app response remain unverified; earlier emulator evidence above
 does not validate this extension. No connected physical-device permissions were changed.
+
+## Home hand-presence diagnostics (4 November 2026)
+
+With custom pose actions enabled, the service previously returned at the blocked
+target guard before updating hand presence. Opening Scroll Vision could therefore
+leave Home/Diagnostics at "not detected" despite fresh camera results. Scroll
+hand-presence/loss diagnostics now update before that guard; recognition and
+external actions remain gated by the existing target, freshness and session checks.
+
+Validation: 182 JVM tests passed with no failures/skips; debug lint completed with
+0 errors and 30 warnings; debug and instrumentation APKs built. The patched debug
+APK was installed with an in-place update on Samsung SM-A165F / Android API 36.
+All 13 `CameraPipelineTest` cases passed on that device, including actual inference
+on the bundled test-only hand fixture, YUV conversion, rotation, timing and preview
+freshness. These tests do not capture a live camera hand or dispatch external actions.
+Saved settings and permission grants matched before/after installation and tests.
+The session remains stopped until an explicit Home Start.
+
+Raw result: ignored `artifacts/hand-diagnostics/camera-pipeline-samsung.txt`.
+The user subsequently confirmed live-hand presence as detected in Home/Diagnostics.
+That confirmation does not establish pose accuracy or target-app behavior.
+
+## Custom pose classification and passive Diagnostics (4 November 2026)
+
+The user reported that Home/Diagnostics detected a hand but showed UNKNOWN for
+every pose, while the reported problem was limited to that screen. The blocked
+target guard skipped pose classification. Fresh blocked-target samples now receive
+passive custom-pose classification for Home/Diagnostics. This never advances
+confirmation, consumes a discrete action or releases a target fence, as covered by
+`CustomSessionRecognitionTest`. External dispatch stays guarded. Threshold
+preferences and saved bindings are preserved.
+
+The active custom classifier still used projected 2D joint angles on this branch.
+Two added regressions reproduced rejected tilted pointing hands and a depth-folded
+index incorrectly treated as straight. Joint angles now include x/y/z with aspect
+correction. Direction and visibility guards remain screen-based; historical parity
+fixtures are unchanged.
+Coverage includes mirrored/aspect-varied hands and up → left → right transitions.
+
+The real `thumb_up.jpg` fixture initially produced valid MediaPipe landmarks but
+failed custom pose classification. Its IP joint measured about 157°, below the
+160° entry threshold. Thumb classification retains the stricter base-joint entry
+test and uses the existing 150° exit threshold at the IP joint. Synthetic cases
+cover a mild bend and rejection of a strongly folded tip in both profiles.
+
+Checks before the pointing retest: 186 JVM tests passed without failures/skips; lint 0 errors and 30
+warnings; debug and instrumentation APK builds passed. All 14 `CameraPipelineTest`
+cases passed on Samsung SM-A165F / API 36, including THUMBS_UP classification from
+the actual model fixture in both custom profiles. The updated debug APK is installed;
+saved settings and permission grants match the pre-install snapshot. The initial
+fixture failure and final pass are preserved in ignored
+`artifacts/hand-diagnostics/pose-classification-samsung.txt` and
+`artifacts/hand-diagnostics/pose-classification-samsung-verified.txt`.
+
+Live-hand pose accuracy, real-app response, sustained performance and the full UI
+matrix remain unverified for this update. The release APK was not rebuilt for this
+investigation. Explicit Home Start is required after installation/testing.
+
+### Pointing retest and closed-thumb correction
+
+The user confirmed that common poses became visible but all four pointing poses
+still failed. A new canonical `pointing_up.jpg` test-only MediaPipe fixture also
+failed at POINTING_UP on the Samsung before the correction. The classifier required
+a thumb joint to bend below the curled-finger threshold even when the thumb rested
+across the palm. Closed-thumb recognition now uses 3D tip-to-palm proximity, keeping
+extended-thumb precedence, existing visibility checks and proximity hysteresis.
+Regression cases cover a resting thumb across the palm, four directions, mirrors,
+aspect ratios and rejection of a thumb extended toward the camera.
+
+Final checks: 187 JVM tests passed with no failures/skips; lint 0 errors and 30
+warnings; debug and instrumentation APKs built. All 15 `CameraPipelineTest` cases
+passed on Samsung SM-A165F / API 36. The actual model/classifier now recognizes the
+pointing image in all four rotated screen directions, alongside the thumbs-up
+fixture in both profiles. No fixture image is packaged in the production APK; both
+are in the instrumentation APK only. The patched debug APK is installed, with saved
+settings and permission grants unchanged. The user subsequently confirmed that all
+four pointing poses are now recognized live in Home/Diagnostics. This is a limited
+qualitative confirmation; recognition rates, external-app response and sustained
+performance remain unmeasured.
+
+The initial failure is retained in ignored
+`artifacts/hand-diagnostics/pointing-fixture-before-fix.txt`; final evidence is
+`artifacts/hand-diagnostics/pointing-samsung-verified.txt`. Fixture results do not
+establish real-hand accuracy or external-app acceptance.

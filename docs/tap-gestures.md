@@ -5,11 +5,18 @@ The following legacy mapping applies when custom pose actions are off (the defau
 | Pose | Action |
 | --- | --- |
 | Index pointing down / up | Forward / backward swipe, respecting direction inversion |
+| Index pointing left / right | Scroll toward content on the left / right; unaffected by direction inversion |
 | Open hand (`NEUTRAL` in diagnostics) | One single tap at the content center |
 | Thumbs-up: thumb vertically extended, other four fingers curled | One double tap at the same content point |
 | Closed hand (four fingers curled, thumb no longer up) | No action; not required for rearming |
 
 Hold an action pose for the confirmation duration and minimum observation count (defaults: 180ms, three observations). Rearming uses elapsed time only. Settings > Rearm delay sets the interval after an action, from 200 to 3000ms (default 450ms). After the delay, the next action needs fresh confirmation. Held pointing and thumbs-up poses can repeat; direct up/down changes are allowed after the delay. Neither an open nor a closed hand releases the timer early.
+
+Horizontal pointing uses the existing horizontal swipe adapter: left content navigation
+swipes the finger right, and right navigation swipes left. The saved swipe duration
+and screen-distance fraction apply, with distance measured across content width.
+Held left/right poses use the same timed repeat as up/down. Practice moves only
+its local five-page horizontal sample.
 
 Open hand is reserved for a single pause tap per presentation. Holding it blocks movement and never repeats the tap, even after the rearm delay or tracking loss. A recognized non-open pose allows a later open-hand presentation to tap again; this tap debounce does not control navigation or thumbs-up rearming. Tracking loss and sample gaps discard candidate evidence; the timer can expire without a tracked hand, but reacquisition still needs fresh confirmation. Duplicate/decreasing timestamps cannot advance it. A new session/settings change resets recognition. CONTINUOUS and FLICK modes retain their movement-only behavior.
 
@@ -33,16 +40,17 @@ other. Custom mappings are saved but inactive in Pointer, FLICK and CONTINUOUS.
 | Pose | Default custom action |
 | --- | --- |
 | Point up / down | Previous / next item once |
-| Point left / right | None |
+| Point left / right | Scroll left / right once |
 | Open hand / closed hand | Single tap / none |
 | Index only / middle only / index + middle | None for each |
 | Thumbs-up | Double tap |
 
 Each binding can instead select NONE, next or previous once, single or double
-center tap, Back, or continuous next/previous while held. Discrete actions run once
+center tap, Back, scroll left/right once, or continuous next/previous while held. Discrete actions run once
 per appearance; continuous begins after confirmation and needs fresh held samples.
 NONE leaves HYBRID flick/movement available. Custom next/previous directions are
-final; reversal still applies to legacy pointing and movement/flick. Reset pose
+final; reversal still applies to vertical legacy pointing and movement/flick. Existing
+saved custom bindings remain unchanged; reset or edit them to use new defaults. Reset pose
 actions resets only that draft group; Apply saves and pauses active tracking.
 Practice uses saved settings and simulates Back and other actions locally.
 
@@ -60,6 +68,12 @@ and remaining physical acceptance.
 `TapGestureTest` covers geometry on both mirrored hands, scale/position/rotation, hysteresis, malformed/partial poses, confirmation, timed repetition, configurable delay, direct direction changes, timer expiry without a hand, open-hand tap debounce, tracking loss and timestamps. `SettingsStoreTest` checks delay persistence and native timed defaults. Coordinator tests cover mapping, inversion, freshness, busy rejection, and pause cancellation. Coordinate tests cover center placement and overlay avoidance. `TapDescriptionTest` checks stationary single/sequential-double stroke construction on Android; `AccessibilityDispatchTest` additionally checks observed single/double taps in an external test-APK surface when the service is enabled through Settings.
 
 Real-camera thumb accuracy and pause/play behavior in TikTok/Reels/Shorts require the physical-device trials in [device validation](device-validation.md).
+
+Horizontal-pointing update verified on 2026-11-04: 182 JVM tests passed with no
+failures or skips, including the unchanged Dart parity fixtures. Android lint
+completed with 0 errors and 30 warnings; debug, unsigned release and instrumentation
+APKs built successfully. Instrumentation execution, the visual UI checklist and
+physical camera/target-app trials were not run for this update.
 
 Initial tap-extension verification on 2026-10-09, before the timed-rearm update:
 

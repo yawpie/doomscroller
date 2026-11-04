@@ -43,9 +43,10 @@ Camera denial explains retry or App info access. Floating controls and notificat
 are optional in Scroll; Skip floating controls saves the existing overlay preference as off.
 Start on Home and wait for Tracking before switching to a feed.
 
-With custom pose actions off (the default), HYBRID/POSE retain the legacy
-pointing, open-hand tap and thumbs-up behavior, including their existing rearm
-rules. CONTINUOUS/FLICK retain movement controls. To configure poses, enable
+With custom pose actions off (the default), HYBRID/POSE support pointing up/down
+for vertical navigation and pointing left/right for horizontal scrolling, plus
+open-hand tap and thumbs-up. Held pointing poses repeat after the saved rearm
+delay and fresh confirmation. CONTINUOUS/FLICK retain movement controls. To configure poses, enable
 Settings → Hand pose actions, choose Pointing directions or Finger combinations,
 then choose an action for each pose. Direction and finger profiles are exclusive;
 open hand, closed hand and thumbs-up are shared. The three finger combinations
@@ -53,17 +54,18 @@ open hand, closed hand and thumbs-up are shared. The three finger combinations
 Custom actions include one swipe, center tap, double tap, Android Back and scrolling
 while a pose is held. NONE sends no pose action; HYBRID may still use flick/movement.
 Custom mappings work in Scroll with POSE/HYBRID, not Pointer, FLICK or CONTINUOUS.
-For horizontal scrolling, choose any pose and assign **Scroll left once** or
-**Scroll right once**, then Apply changes. For example, bind Point left to Scroll
-left once and Point right to Scroll right once in the Pointing directions profile.
-Each confirmed appearance sends one swipe; release the pose before repeating.
+The default custom Pointing directions profile maps Point left/right to
+**Scroll left once** / **Scroll right once**. Existing saved bindings stay unchanged;
+edit these poses or reset pose actions and Apply to use the new defaults. Any pose
+can use either horizontal action. Custom actions send one swipe per confirmed
+appearance; release the pose before repeating.
 Left/right describes content navigation: left swipes the finger right, and right
 swipes the finger left. Distance uses the saved screen-distance fraction of the
 content width, and duration uses the saved swipe duration. Practice shows a separate
 five-page horizontal sample; external apps decide whether the swipe scrolls or
 performs another action.
-Reverse direction affects legacy pointing and movement/flick, not selected custom
-pose directions. Gestures describes saved settings; apply or discard an unsaved
+Reverse direction affects vertical legacy pointing and movement/flick; horizontal
+left/right and selected custom pose directions stay fixed. Gestures describes saved settings; apply or discard an unsaved
 draft before entering Practice. Reset pose actions changes only that draft group.
 
 Gestures → Practice safely uses saved recognition settings with a local sample

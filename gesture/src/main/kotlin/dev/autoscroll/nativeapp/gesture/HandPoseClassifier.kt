@@ -27,10 +27,16 @@ class HandPoseClassifier(val config: HandPoseDetectionConfig = HandPoseDetection
         for (mcp in 5..17 step 4) {
             if (!validFinger(points, mcp, palmLength)) return RecognizedHandPose.UNKNOWN
         }
-        if ((activePose == RecognizedHandPose.POINTING_UP || activePose == RecognizedHandPose.POINTING_DOWN) &&
+        if ((activePose == RecognizedHandPose.POINTING_UP || activePose == RecognizedHandPose.POINTING_DOWN ||
+                config.tapGesturesEnabled && (activePose == RecognizedHandPose.POINTING_LEFT || activePose == RecognizedHandPose.POINTING_RIGHT)) &&
             pointing(points, activePose, exit = true)) return activePose
         if (pointing(points, RecognizedHandPose.POINTING_UP)) return RecognizedHandPose.POINTING_UP
         if (pointing(points, RecognizedHandPose.POINTING_DOWN)) return RecognizedHandPose.POINTING_DOWN
+        // Keep horizontal pointing in the native extension, outside the saved Dart compatibility path.
+        if (config.tapGesturesEnabled) {
+            if (pointing(points, RecognizedHandPose.POINTING_LEFT)) return RecognizedHandPose.POINTING_LEFT
+            if (pointing(points, RecognizedHandPose.POINTING_RIGHT)) return RecognizedHandPose.POINTING_RIGHT
+        }
         if (config.tapGesturesEnabled && validFinger(points, 1, palmLength)) {
             if (activePose == RecognizedHandPose.THUMBS_UP && thumbsUp(points, exit = true)) return activePose
             if (thumbsUp(points)) return RecognizedHandPose.THUMBS_UP
@@ -64,9 +70,15 @@ class HandPoseClassifier(val config: HandPoseDetectionConfig = HandPoseDetection
         val dy = points[8].y - points[5].y
         val length = sqrt(dx * dx + dy * dy)
         if (length <= 1e-9) return false
-        val alignment = dy / length
         val threshold = if (exit) config.exitVerticalAlignment else config.minimumVerticalAlignment
-        return if (pose == RecognizedHandPose.POINTING_DOWN) alignment >= threshold else alignment <= -threshold
+        val alignment = when (pose) {
+            RecognizedHandPose.POINTING_UP -> -dy / length
+            RecognizedHandPose.POINTING_DOWN -> dy / length
+            RecognizedHandPose.POINTING_LEFT -> -dx / length
+            RecognizedHandPose.POINTING_RIGHT -> dx / length
+            else -> return false
+        }
+        return alignment >= threshold
     }
 
     private fun extended(points: List<HandLandmark>, mcp: Int, threshold: Double): Boolean =

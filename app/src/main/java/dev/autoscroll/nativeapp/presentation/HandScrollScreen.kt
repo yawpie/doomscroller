@@ -207,6 +207,10 @@ internal fun HandScrollScreen(
                                 "Point your index finger down. Curl the other fingers.", "Holding this pose can repeat after the rearm delay and fresh confirmation.")
                             GestureCard(if (settings.inverted) "Next item" else "Previous item", HandDrawing.UP,
                                 "Point your index finger up. Curl the other fingers.", "Holding this pose can repeat after the rearm delay and fresh confirmation.")
+                            GestureCard("Scroll left", HandDrawing.LEFT,
+                                "Point your index finger left. Curl the other fingers.", "Holding this pose can repeat after the rearm delay and fresh confirmation. Direction reversal does not change left/right.")
+                            GestureCard("Scroll right", HandDrawing.RIGHT,
+                                "Point your index finger right. Curl the other fingers.", "Holding this pose can repeat after the rearm delay and fresh confirmation. Direction reversal does not change left/right.")
                             GestureCard("Tap video", HandDrawing.OPEN,
                                 "Show an open hand for one tap at the center of your feed. This may toggle play or pause, depending on the app.",
                                 "Tracking stays on. Holding your hand open sends no extra taps and blocks movement gestures. Show a different visible pose before another open-hand tap; losing tracking alone does not rearm it.")
@@ -402,11 +406,11 @@ private fun compactGuide(settings: NativeSettings) = if (settings.controlMode ==
     else if (settings.poseActions.enabled && (settings.mode == GestureMode.POSE || settings.mode == GestureMode.HYBRID))
     "Custom pose actions follow your saved profile. Open Gestures for the pose and action list."
     else when (settings.mode) {
-    GestureMode.POSE -> "Point down/up to navigate. Open hand: tap video once. Thumbs-up: double tap. Pointing and thumbs-up can repeat."
-    GestureMode.HYBRID -> "Point down/up or flick to navigate; move your palm to scroll. Open hand: tap video once. Thumbs-up: double tap."
+    GestureMode.POSE -> "Point down/up to navigate; point left/right to scroll horizontally. Open hand: tap video once. Thumbs-up: double tap. Pointing and thumbs-up can repeat."
+    GestureMode.HYBRID -> "Point down/up or flick to navigate; point left/right to scroll horizontally; move your palm to scroll. Open hand: tap video once. Thumbs-up: double tap."
     GestureMode.FLICK -> "Flick your palm down/up to navigate. Settle your hand before repeating. Pose taps are off in this mode."
     GestureMode.CONTINUOUS -> "Move your palm vertically to scroll. Hold still to stop scrolling. Pose taps are off in this mode."
-} + if (settings.inverted) " Scroll direction is reversed." else ""
+} + if (settings.inverted) " Vertical scroll direction is reversed; left/right stays the same." else ""
 
 internal fun modeLabel(mode: GestureMode) = when (mode) {
     GestureMode.HYBRID -> "Hybrid · poses and movement"

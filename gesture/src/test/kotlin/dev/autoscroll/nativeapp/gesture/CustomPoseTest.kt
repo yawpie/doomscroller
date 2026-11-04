@@ -87,6 +87,90 @@ class CustomPoseTest {
         assertNull(classifier.classify(half, 1.0, combinations))
     }
 
+    @Test fun tiltedHandKeepsFingerIdentityAndPointingDirectionsAcrossTransitions() {
+        fun tilted(rotation: Double, mirror: Boolean, aspect: Double): List<HandLandmark> {
+            val tilt = 65 * PI / 180
+            val a = (1 + cos(tilt)) / 2
+            val b = (1 - cos(tilt)) / 2
+            val depth = sin(tilt) / kotlin.math.sqrt(2.0)
+            val source = points(setOf(5)).toMutableList()
+            for (mcp in listOf(9, 13, 17)) {
+                source[mcp + 2] = source[mcp + 2].copy(x = source[mcp].x, z = 0.05)
+                source[mcp + 3] = source[mcp + 3].copy(x = source[mcp].x, z = 0.05)
+            }
+            return source.map { p ->
+                val x = p.x - 0.5
+                val y = p.y - 0.5
+                val tx = (a * x - b * y - depth * p.z) * if (mirror) -1 else 1
+                val ty = a * y - b * x - depth * p.z
+                p.copy(x = 0.5 + (tx * cos(rotation) - ty * sin(rotation)) / aspect,
+                    y = 0.5 + tx * sin(rotation) + ty * cos(rotation),
+                    z = (depth * (x + y) + cos(tilt) * p.z) / aspect)
+            }
+        }
+        val classifier = CustomPoseClassifier(config)
+        for (aspect in listOf(0.75, 1.0, 1.5)) for (mirror in listOf(false, true)) {
+            val up = tilted(0.0, mirror, aspect)
+            assertEquals(PoseId.INDEX_ONLY, classifier.classify(up, aspect, combinations))
+            val detector = CustomPoseDetector(PoseActions(enabled = true), config)
+            for ((i, entry) in listOf(up to PoseId.POINTING_UP,
+                tilted(-PI / 2, mirror, aspect) to PoseId.POINTING_LEFT,
+                tilted(PI / 2, mirror, aspect) to PoseId.POINTING_RIGHT).withIndex()) {
+                for (step in 0..2) {
+                    val result = detector.process(HandTrackingResult((i * 3L + step) * 200,
+                        HandPose(entry.first), uprightAspectRatio = aspect))
+                    assertEquals(entry.second, result.pose)
+                    if (step == 2) assertEquals(entry.second, result.event)
+                }
+            }
+        }
+    }
+
+    @Test fun depthFoldedIndexIsRejectedWhileDepthTranslationPreservesPose() {
+        val classifier = CustomPoseClassifier(config)
+        assertEquals(PoseId.POINTING_UP, classifier.classify(points(setOf(5)).map { it.copy(z = -10.0) }, 1.0, direction))
+        val bent = points(setOf(5)).toMutableList()
+        bent[7] = bent[7].copy(z = 0.1)
+        assertNull(classifier.classify(bent, 1.0, direction))
+        assertNull(classifier.classify(bent, 1.0, combinations))
+    }
+
+    @Test fun extendedThumbAllowsNaturalIpBendAndFoldedTipBecomesClosedHand() {
+        val classifier = CustomPoseClassifier(config)
+        for (mirror in listOf(false, true)) for (aspect in listOf(0.75, 1.0, 1.5)) {
+            fun thumb(bend: Double): List<HandLandmark> {
+                val p = points(emptySet(), thumbOpen = true).toMutableList()
+                p[4] = p[4].copy(x = p[3].x + 0.06 * sin(bend), y = p[3].y - 0.06 * cos(bend))
+                return p.map { it.copy(x = 0.5 + (it.x - 0.5) * (if (mirror) -1 else 1) / aspect) }
+            }
+            for (profile in PoseRecognitionProfile.entries) {
+                assertEquals(PoseId.THUMBS_UP, classifier.classify(thumb(PI / 8), aspect, profile))
+                assertEquals(PoseId.CLOSED_HAND, classifier.classify(thumb(PI / 3), aspect, profile))
+            }
+        }
+    }
+
+    @Test fun thumbRestingAcrossPalmSupportsAllPointingDirections() {
+        val classifier = CustomPoseClassifier(config)
+        val p = points(setOf(5)).toMutableList()
+        p[3] = p[3].copy(x = 0.43, y = 0.495)
+        p[4] = p[4].copy(x = 0.485, y = 0.495)
+        for ((rotation, expected) in listOf(0.0 to PoseId.POINTING_UP, PI / 2 to PoseId.POINTING_RIGHT,
+            PI to PoseId.POINTING_DOWN, -PI / 2 to PoseId.POINTING_LEFT)) {
+            for (mirror in listOf(false, true)) for (aspect in listOf(0.75, 1.0, 1.5)) {
+                val transformed = p.map {
+                    val x = (it.x - 0.5) * if (mirror) -1 else 1
+                    val y = it.y - 0.5
+                    it.copy(x = 0.5 + (x * cos(rotation) - y * sin(rotation)) / aspect,
+                        y = 0.5 + x * sin(rotation) + y * cos(rotation))
+                }
+                assertEquals(expected, classifier.classify(transformed, aspect, direction))
+            }
+        }
+        p[4] = p[4].copy(z = -0.5)
+        assertNull(classifier.classify(p, 1.0, direction))
+    }
+
     @Test fun discreteLatchSurvivesUnknownAndRequiresTimedValidRelease() {
         val actions = PoseActions(enabled = true, profile = combinations).withBinding(PoseId.INDEX_ONLY, PoseAction.BACK)
         val detector = CustomPoseDetector(actions, config)

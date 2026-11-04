@@ -131,7 +131,8 @@ class HandPoseDetector(val config: HandPoseDetectionConfig = HandPoseDetectionCo
     }
 
     private fun isPointing(pose: RecognizedHandPose): Boolean =
-        pose == RecognizedHandPose.POINTING_UP || pose == RecognizedHandPose.POINTING_DOWN
+        pose == RecognizedHandPose.POINTING_UP || pose == RecognizedHandPose.POINTING_DOWN ||
+            pose == RecognizedHandPose.POINTING_LEFT || pose == RecognizedHandPose.POINTING_RIGHT
 
     private fun isAction(pose: RecognizedHandPose): Boolean = isPointing(pose) ||
         (config.tapGesturesEnabled && (pose == RecognizedHandPose.THUMBS_UP ||

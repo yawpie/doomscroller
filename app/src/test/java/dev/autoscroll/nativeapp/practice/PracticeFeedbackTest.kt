@@ -17,13 +17,19 @@ class PracticeFeedbackTest {
         for ((mcp, x, y) in listOf(Triple(5, -0.065, -0.06), Triple(9, -0.02, -0.07),
             Triple(13, 0.03, -0.06), Triple(17, 0.075, -0.04))) {
             val extended = pose == RecognizedHandPose.NEUTRAL ||
-                (mcp == 5 && (pose == RecognizedHandPose.POINTING_UP || pose == RecognizedHandPose.POINTING_DOWN))
+                (mcp == 5 && pose in listOf(RecognizedHandPose.POINTING_UP, RecognizedHandPose.POINTING_DOWN,
+                    RecognizedHandPose.POINTING_LEFT, RecognizedHandPose.POINTING_RIGHT))
             points[mcp] = x to y
             points[mcp + 1] = x to y - 0.085
             points[mcp + 2] = if (extended) x to y - 0.16 else x + 0.05 to y - 0.085
             points[mcp + 3] = if (extended) x to y - 0.22 else x + 0.05 to y - 0.035
         }
-        val angle = if (pose == RecognizedHandPose.POINTING_DOWN) PI else 0.0
+        val angle = when (pose) {
+            RecognizedHandPose.POINTING_DOWN -> PI
+            RecognizedHandPose.POINTING_LEFT -> -PI / 2
+            RecognizedHandPose.POINTING_RIGHT -> PI / 2
+            else -> 0.0
+        }
         return HandTrackingResult(time, HandPose(points.mapIndexed { index, (x, y) ->
             HandLandmark(index, 0.5 + x * kotlin.math.cos(angle) - y * kotlin.math.sin(angle),
                 yOffset + x * kotlin.math.sin(angle) + y * kotlin.math.cos(angle), 0.0)
@@ -59,6 +65,23 @@ class PracticeFeedbackTest {
         hold(feedback, RecognizedHandPose.NEUTRAL, 3400L..3700L step 100)
         assertTrue(feedback.state.videoPlaying)
         assertEquals(2, feedback.state.actionCount)
+    }
+
+    @Test fun horizontalPointingMovesOnlyLocalPagesWithTimedRepeatsAndFixedDirection() {
+        for (mode in listOf(GestureMode.POSE, GestureMode.HYBRID)) for (inverted in listOf(false, true)) {
+            for ((pose, direction) in listOf(RecognizedHandPose.POINTING_LEFT to -1, RecognizedHandPose.POINTING_RIGHT to 1)) {
+                val feedback = PracticeFeedback(NativeSettings(mode = mode, inverted = inverted))
+                hold(feedback, pose, 0L..200L step 100)
+                assertEquals(2 + direction, feedback.state.horizontalPosition)
+                assertEquals(if (direction < 0) "Scroll left" else "Scroll right", feedback.state.lastAction)
+                hold(feedback, pose, 300L..1800L step 100)
+                assertEquals(if (direction < 0) 0 else 4, feedback.state.horizontalPosition)
+                assertEquals(3, feedback.state.actionCount)
+                assertEquals(2.0, feedback.state.position, 0.0)
+                assertTrue(feedback.state.videoPlaying)
+                assertEquals(0, feedback.state.doubleTaps)
+            }
+        }
     }
 
     @Test fun inversionReversesNavigationButNotTapsAndResetClearsEvidence() {

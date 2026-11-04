@@ -105,7 +105,8 @@ internal fun PracticeScreen(state: PracticeState, settings: NativeSettings, came
                     } else {
                     Text("Current mode: ${modeLabel(settings.mode)}${if (settings.inverted) " · motion direction reversed" else ""}")
                     SampleFeed(state.sample, onOpenLocalDetail, state.session == GestureSessionState.Active,
-                        settings.poseActions.enabled && (settings.mode == GestureMode.POSE || settings.mode == GestureMode.HYBRID))
+                        settings.poseActions.enabled && (settings.mode == GestureMode.POSE || settings.mode == GestureMode.HYBRID),
+                        settings.mode == GestureMode.POSE || settings.mode == GestureMode.HYBRID)
                     Text("Try a gesture", style = MaterialTheme.typography.titleMedium)
                     if (settings.poseActions.enabled && (settings.mode == GestureMode.POSE || settings.mode == GestureMode.HYBRID)) {
                         Text("Custom pose actions use your saved settings. One-shot actions run once per appearance; continuous actions move while the confirmed pose stays visible.")
@@ -113,6 +114,7 @@ internal fun PracticeScreen(state: PracticeState, settings: NativeSettings, came
                         if (settings.mode == GestureMode.HYBRID) Text("A pose with no action does not block flick or movement controls.")
                     } else if (settings.mode == GestureMode.POSE || settings.mode == GestureMode.HYBRID) {
                         Text("Point down for ${if (settings.inverted) "previous" else "next"}; point up for ${if (settings.inverted) "next" else "previous"}. Holding a pointing pose or thumbs-up can repeat after the saved rearm delay plus fresh confirmation.")
+                        Text("Point left to scroll left; point right to scroll right. Direction reversal does not change left/right. Watch the horizontal sample pages.")
                         Text("Open hand: Tap video once. It toggles this sample's playback, while tracking stays on. A held open hand will not tap again, even after tracking loss. Show a different visible pose before another open-hand tap.")
                         Text("Thumbs-up: Double tap. This sample counts it; another app decides what a double tap does.")
                     }
@@ -227,8 +229,9 @@ private fun PracticeLiveFeedback(state: PracticeState, settings: NativeSettings,
 }
 
 @Composable
-private fun SampleFeed(sample: PracticeSample, openDetail: () -> Unit, canOpenDetail: Boolean, showBackSample: Boolean) {
-    if (showBackSample) {
+private fun SampleFeed(sample: PracticeSample, openDetail: () -> Unit, canOpenDetail: Boolean, showBackSample: Boolean,
+    showHorizontalSample: Boolean) {
+    if (showHorizontalSample) {
     Text("Horizontal sample · page ${sample.horizontalPosition + 1} of 5", style = MaterialTheme.typography.titleMedium)
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         repeat(5) { index ->
@@ -239,6 +242,8 @@ private fun SampleFeed(sample: PracticeSample, openDetail: () -> Unit, canOpenDe
             }
         }
     }
+    }
+    if (showBackSample) {
     OutlinedCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(if (sample.localDetailOpen) "Sample detail" else "Sample list", style = MaterialTheme.typography.titleMedium)
@@ -280,6 +285,8 @@ private fun SampleFeed(sample: PracticeSample, openDetail: () -> Unit, canOpenDe
 private fun poseLabel(pose: RecognizedHandPose) = when (pose) {
     RecognizedHandPose.POINTING_UP -> "Pointing up"
     RecognizedHandPose.POINTING_DOWN -> "Pointing down"
+    RecognizedHandPose.POINTING_LEFT -> "Pointing left"
+    RecognizedHandPose.POINTING_RIGHT -> "Pointing right"
     RecognizedHandPose.NEUTRAL -> "Open hand · Tap video"
     RecognizedHandPose.THUMBS_UP -> "Thumbs-up · Double tap"
     RecognizedHandPose.CLOSED_HAND -> "Curled hand"

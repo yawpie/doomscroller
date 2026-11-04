@@ -20,13 +20,19 @@ class TapGestureTest {
         for ((mcp, x, y) in listOf(Triple(5, -0.065, -0.06), Triple(9, -0.02, -0.07),
             Triple(13, 0.03, -0.06), Triple(17, 0.075, -0.04))) {
             val extended = pose == RecognizedHandPose.NEUTRAL ||
-                (mcp == 5 && (pose == RecognizedHandPose.POINTING_UP || pose == RecognizedHandPose.POINTING_DOWN))
+                (mcp == 5 && pose in listOf(RecognizedHandPose.POINTING_UP, RecognizedHandPose.POINTING_DOWN,
+                    RecognizedHandPose.POINTING_LEFT, RecognizedHandPose.POINTING_RIGHT))
             p[mcp] = x to y
             p[mcp + 1] = x to y - 0.085
             p[mcp + 2] = if (extended) x to y - 0.16 else x + 0.05 to y - 0.085
             p[mcp + 3] = if (extended) x to y - 0.22 else x + 0.05 to y - 0.035
         }
-        val angle = rotation + if (pose == RecognizedHandPose.POINTING_DOWN) PI else 0.0
+        val angle = rotation + when (pose) {
+            RecognizedHandPose.POINTING_DOWN -> PI
+            RecognizedHandPose.POINTING_LEFT -> -PI / 2
+            RecognizedHandPose.POINTING_RIGHT -> PI / 2
+            else -> 0.0
+        }
         return p.mapIndexed { i, (x, y) ->
             val mirroredX = if (mirror) -x else x
             HandLandmark(i, xOffset + scale * (mirroredX * cos(angle) - y * sin(angle)),
@@ -66,6 +72,24 @@ class TapGestureTest {
         assertEquals(RecognizedHandPose.UNKNOWN, classifier.classify(invalid))
     }
 
+    @Test fun horizontalPointingUsesScreenDirectionAndHysteresisWithoutChangingCompatibility() {
+        val classifier = HandPoseClassifier(config)
+        for (pose in listOf(RecognizedHandPose.POINTING_LEFT, RecognizedHandPose.POINTING_RIGHT)) {
+            for (mirror in listOf(false, true)) for (rotation in listOf(-0.3, 0.0, 0.3)) {
+                for (scale in listOf(0.45, 1.0, 1.25)) {
+                    assertEquals(pose, classifier.classify(points(pose, rotation, mirror, scale)))
+                }
+            }
+            assertEquals(RecognizedHandPose.UNKNOWN, classifier.classify(points(pose, 0.65)))
+            assertEquals(pose, classifier.classify(points(pose, 0.65), pose))
+            assertNotEquals(pose, classifier.classify(points(pose, 1.0), pose))
+            assertEquals(RecognizedHandPose.UNKNOWN, HandPoseClassifier().classify(points(pose), pose))
+            val collapsed = points(pose)
+            for (index in 6..8) collapsed[index] = collapsed[5].copy(index = index)
+            assertEquals(RecognizedHandPose.UNKNOWN, classifier.classify(collapsed))
+        }
+    }
+
     @Test fun thumbUsesSeparateEntryAndExitThresholds() {
         val classifier = HandPoseClassifier(config)
         val thumb = RecognizedHandPose.THUMBS_UP
@@ -75,7 +99,8 @@ class TapGestureTest {
     }
 
     @Test fun heldPointingAndThumbRepeatAfterTimeAndFreshConfirmationWithoutAnyReleasePose() {
-        for (pose in listOf(RecognizedHandPose.POINTING_UP, RecognizedHandPose.POINTING_DOWN, RecognizedHandPose.THUMBS_UP)) {
+        for (pose in listOf(RecognizedHandPose.POINTING_UP, RecognizedHandPose.POINTING_DOWN,
+            RecognizedHandPose.POINTING_LEFT, RecognizedHandPose.POINTING_RIGHT, RecognizedHandPose.THUMBS_UP)) {
             val events = hold(HandPoseDetector(config), pose, 0L..1800L step 100)
             assertEquals(listOf(200L, 900L, 1600L), events.map { it.timestampMs })
             assertTrue(events.all { it.pose == pose })
@@ -169,5 +194,18 @@ class TapGestureTest {
         val legacy = HandPoseDetector()
         assertTrue(hold(legacy, RecognizedHandPose.NEUTRAL, 0L..1000L step 100).isEmpty())
         assertEquals(RecognizedHandPose.UNKNOWN, HandPoseClassifier().classify(points(RecognizedHandPose.THUMBS_UP)))
+    }
+
+    @Test fun horizontalPosesOwnHybridOutputAndStayInactiveInMovementOnlyModes() {
+        for (pose in listOf(RecognizedHandPose.POINTING_LEFT, RecognizedHandPose.POINTING_RIGHT)) {
+            for (mode in GestureMode.entries) {
+                val coordinator = GestureCoordinator(poseDetector = HandPoseDetector(config), mode = mode)
+                val decisions = (0L..200L step 100).map { coordinator.process(sample(it, pose)) }
+                if (mode == GestureMode.POSE || mode == GestureMode.HYBRID) {
+                    assertEquals(pose, decisions.last().pose?.pose)
+                    assertTrue(decisions.all { it.suppressesContinuous && it.flick == null })
+                } else assertTrue(decisions.all { it.pose == null })
+            }
+        }
     }
 }

@@ -185,30 +185,39 @@ class GestureCameraService : LifecycleService() {
                                 if (sessionMode == ControlMode.POINTER) {
                                     processPointer(result); return@CameraController
                                 }
+                                val wasDetected = diagnostics.handDetected
+                                diagnostics = diagnostics.copy(handDetected = result.handDetected,
+                                    trackingLossCount = diagnostics.trackingLossCount + if (wasDetected && !result.handDetected) 1 else 0)
                                 if (customSession) {
                                     syncCustomEligibility()
                                     val now = SystemClock.elapsedRealtime()
-                                    if (!customEligible || result.timestampMs <= customFenceMs || result.timestampMs > now ||
-                                        now - result.timestampMs > settings.scroll.staleAfterMs ||
-                                        lastCustomResultMs?.let { result.timestampMs <= it } == true) {
+                                    val fresh = result.timestampMs > customFenceMs && result.timestampMs <= now &&
+                                        now - result.timestampMs <= settings.scroll.staleAfterMs &&
+                                        lastCustomResultMs?.let { result.timestampMs <= it } != true
+                                    if (!customEligible || !fresh) {
                                         recognition?.loseTracking()
                                         actions.invalidate()
+                                        diagnostics = diagnostics.copy(pose = if (fresh)
+                                            recognition?.diagnosticPose(result)?.name ?: "UNKNOWN" else "UNKNOWN",
+                                            posePhase = HandPosePhase.READY.name)
+                                        publishDiagnostics()
                                         return@CameraController
                                     }
                                     lastCustomResultMs = result.timestampMs
-                                } else if (overlayInteracting || manualSwipe?.isActive == true) return@CameraController
+                                } else if (overlayInteracting || manualSwipe?.isActive == true) {
+                                    publishDiagnostics()
+                                    return@CameraController
+                                }
                                 actions.setSessionActive(true)
-                                val wasDetected = diagnostics.handDetected
                                 val decision = recognition!!.process(result, SystemClock.elapsedRealtime(), contentBounds(), true).scroll!!
                                 actions.process(decision, result.timestampMs,
                                     if (customSession) customTarget?.packageName else null,
                                     if (customSession) customTarget?.generation else null)
-                                diagnostics = diagnostics.copy(handDetected = result.handDetected,
+                                diagnostics = diagnostics.copy(
                                     pose = decision.customPose?.pose?.name ?: if (customSession) "UNKNOWN" else gestures!!.poseDetector.currentPose.name,
                                     posePhase = decision.customPose?.phase?.name ?: gestures!!.poseDetector.phase.name,
                                     lastFlick = decision.flick?.direction?.name ?: diagnostics.lastFlick,
-                                    lastPose = decision.customPose?.event?.name ?: decision.pose?.pose?.name ?: diagnostics.lastPose,
-                                    trackingLossCount = diagnostics.trackingLossCount + if (wasDetected && !result.handDetected) 1 else 0)
+                                    lastPose = decision.customPose?.event?.name ?: decision.pose?.pose?.name ?: diagnostics.lastPose)
                                 publishDiagnostics()
                             }
                         },

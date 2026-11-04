@@ -83,6 +83,6 @@ data class HandPoseDetectionConfig(
     val minimumFingerLengthRatio: Double = 0.35,
     val minimumBoneLengthRatio: Double = 0.03,
     val maximumSampleGapMs: Long = 250,
-    // Native app enables taps; false preserves the original Dart replay contract.
+    // Native app enables taps and horizontal pointing; false preserves the original Dart replay contract.
     val tapGesturesEnabled: Boolean = false,
 )

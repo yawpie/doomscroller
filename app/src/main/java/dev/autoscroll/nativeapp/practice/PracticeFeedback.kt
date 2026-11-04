@@ -90,6 +90,8 @@ internal class PracticeFeedback(private val settings: NativeSettings) {
                     settings.scroll.flickScrollDistance / SAMPLE_HEIGHT_PX else 1.0
         val action = when {
             direction != null -> if (movement > 0) "Next item" else "Previous item"
+            resolved == PoseAction.SCROLL_LEFT -> "Scroll left"
+            resolved == PoseAction.SCROLL_RIGHT -> "Scroll right"
             resolved == PoseAction.SINGLE_TAP -> "Tap video"
             resolved == PoseAction.DOUBLE_TAP -> "Double tap"
             velocity != 0.0 -> if (velocity > 0) "Moving to next item" else "Moving to previous item"
@@ -97,6 +99,11 @@ internal class PracticeFeedback(private val settings: NativeSettings) {
         }
         state = state.copy(
             position = (state.position + movement).coerceIn(0.0, 4.0),
+            horizontalPosition = (state.horizontalPosition + when (resolved) {
+                PoseAction.SCROLL_LEFT -> -1
+                PoseAction.SCROLL_RIGHT -> 1
+                else -> 0
+            }).coerceIn(0, 4),
             videoPlaying = if (resolved == PoseAction.SINGLE_TAP) !state.videoPlaying else state.videoPlaying,
             doubleTaps = state.doubleTaps + if (resolved == PoseAction.DOUBLE_TAP) 1 else 0,
             actionCount = state.actionCount + if (decision.pose != null || decision.flick != null) 1 else 0,

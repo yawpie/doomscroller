@@ -98,7 +98,8 @@ class ScrollActionCoordinator(
             lastDiscreteTimestamp = timestamp
             val distance = if (pose == null && config.flickAction == FlickScrollAction.FAST_SCROLL)
                 config.flickScrollDistance else null
-            val request = if (action.isTap) ScrollRequest(action, expectedTargetPackage = expectedTargetPackage,
+            val request = if (action.isTap || action == ScrollAction.LEFT || action == ScrollAction.RIGHT)
+                ScrollRequest(action, expectedTargetPackage = expectedTargetPackage,
                 expectedTargetGeneration = expectedTargetGeneration)
                 else ScrollRequest(action, distance, config.flickDurationMs, expectedTargetPackage, expectedTargetGeneration)
             dispatch(request, timestamp)

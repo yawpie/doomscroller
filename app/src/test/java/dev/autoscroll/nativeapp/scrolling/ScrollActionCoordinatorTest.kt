@@ -100,6 +100,24 @@ class ScrollActionCoordinatorTest {
             executor.requests.map { it.action })
     }
 
+    @Test fun horizontalPointingKeepsDirectionSavedSwipeSettingsAndTargetGuards() = runTest {
+        for (inverted in listOf(false, true)) {
+            val executor = FakeExecutor()
+            var now = 1000L
+            val coordinator = ScrollActionCoordinator(executor, this, { now })
+            coordinator.configure(inverted = inverted)
+            coordinator.setSessionActive(true)
+            coordinator.process(pose(RecognizedHandPose.POINTING_LEFT, now), expectedTargetPackage = "target", expectedTargetGeneration = 7)
+            runCurrent()
+            now += 100
+            coordinator.process(pose(RecognizedHandPose.POINTING_RIGHT, now), expectedTargetPackage = "target", expectedTargetGeneration = 7)
+            runCurrent()
+            assertEquals(listOf(ScrollAction.LEFT, ScrollAction.RIGHT), executor.requests.map { it.action })
+            assertTrue(executor.requests.all { it.durationMs == null && it.distancePixels == null &&
+                it.expectedTargetPackage == "target" && it.expectedTargetGeneration == 7L })
+        }
+    }
+
     @Test fun staleFuturePreviousSessionAndDuplicateEventsNeverDispatch() = runTest {
         val executor = FakeExecutor()
         var now = 1000L

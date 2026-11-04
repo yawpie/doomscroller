@@ -23,6 +23,7 @@ response; record those as separate trials.
 | --- | --- |
 | Point up |20 deliberate confirmations; backward actions repeat only after the configured delay and fresh confirmation while held 5 seconds |
 | Point down |20 deliberate confirmations; forward actions repeat only after the configured delay and fresh confirmation |
+| Point left/right |20 confirmations per direction and hand in POSE/HYBRID; observe horizontal content navigation, repeats after delay plus fresh confirmation, unchanged directions with reversal on, and no vertical navigation; compare portrait/landscape and Practice |
 | Rearm |20 repetitions using time only, including held poses, direct up/down changes and no hand during the delay; open/closed hands cannot shorten the interval; reacquisition needs fresh confirmation |
 | Rearm settings |Move the 200–3000ms slider, compare action intervals including confirmation time, relaunch and verify the saved duration |
 | Open hand |20 confirmations per hand in HYBRID/POSE; one center single tap; no repeat while held 5 seconds; independently observe pause/play toggle in supporting feeds |

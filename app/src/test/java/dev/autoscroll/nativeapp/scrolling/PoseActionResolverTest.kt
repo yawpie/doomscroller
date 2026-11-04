@@ -6,6 +6,20 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PoseActionResolverTest {
+    @Test fun horizontalPointingDefaultsMatchLegacyAndRespectExplicitCustomBindings() {
+        for (inverted in listOf(false, true)) {
+            val settings = NativeSettings(mode = GestureMode.POSE, inverted = inverted, poseActions = PoseActions(enabled = true))
+            assertEquals(PoseAction.SCROLL_LEFT, PoseActionResolver.custom(PoseId.POINTING_LEFT, settings))
+            assertEquals(PoseAction.SCROLL_RIGHT, PoseActionResolver.custom(PoseId.POINTING_RIGHT, settings))
+            assertEquals(PoseAction.SCROLL_LEFT, PoseActionResolver.legacy(RecognizedHandPose.POINTING_LEFT, inverted))
+            assertEquals(PoseAction.SCROLL_RIGHT, PoseActionResolver.legacy(RecognizedHandPose.POINTING_RIGHT, inverted))
+            val changed = settings.copy(poseActions = settings.poseActions.withBinding(PoseId.POINTING_LEFT, PoseAction.NONE)
+                .withBinding(PoseId.POINTING_RIGHT, PoseAction.BACK))
+            assertEquals(PoseAction.NONE, PoseActionResolver.custom(PoseId.POINTING_LEFT, changed))
+            assertEquals(PoseAction.BACK, PoseActionResolver.custom(PoseId.POINTING_RIGHT, changed))
+        }
+    }
+
     @Test fun everyBindingAcceptsEveryActionIndependentlyAndAllNoneIsValid() {
         val empty = PoseActions(enabled = true, bindings = PoseId.entries.associateWith { PoseAction.NONE })
         for (pose in PoseId.entries) for (action in PoseAction.entries) {

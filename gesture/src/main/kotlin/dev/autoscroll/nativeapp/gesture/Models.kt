@@ -59,7 +59,7 @@ data class FlickEvent(
     val durationMs: Long,
 )
 
-enum class RecognizedHandPose { POINTING_UP, POINTING_DOWN, NEUTRAL, THUMBS_UP, CLOSED_HAND, UNKNOWN }
+enum class RecognizedHandPose { POINTING_UP, POINTING_DOWN, POINTING_LEFT, POINTING_RIGHT, NEUTRAL, THUMBS_UP, CLOSED_HAND, UNKNOWN }
 enum class HandPosePhase { READY, CONFIRMING, LATCHED, WAITING_REARM }
 data class PoseEvent(val pose: RecognizedHandPose, val timestampMs: Long)
 data class CustomPoseResult(

@@ -5,6 +5,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.RectF
+import android.graphics.Matrix
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -13,6 +14,9 @@ import dev.autoscroll.nativeapp.mediapipe.InferenceMetrics
 import dev.autoscroll.nativeapp.mediapipe.LatencyWindow
 import dev.autoscroll.nativeapp.gesture.HandLandmark
 import dev.autoscroll.nativeapp.gesture.HandPose
+import dev.autoscroll.nativeapp.gesture.CustomPoseClassifier
+import dev.autoscroll.nativeapp.gesture.PoseId
+import dev.autoscroll.nativeapp.gesture.PoseRecognitionProfile
 import java.nio.ByteBuffer
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -176,6 +180,46 @@ class CameraPipelineTest {
         InstrumentationRegistry.getInstrumentation().context.assets.open("thumb_up.jpg").use {
             checkNotNull(BitmapFactory.decodeStream(it)) { "Cannot decode shared hand fixture" }
         }
+
+    @Test fun officialThumbFixtureIsRecognizedByBothCustomProfiles() {
+        val bitmap = instrumentationFixture()
+        val aspect = bitmap.width.toDouble() / bitmap.height
+        val engine = HandLandmarkerEngine(InstrumentationRegistry.getInstrumentation().targetContext, TrackingConfig())
+        try {
+            val pose = checkNotNull(engine.detect(bitmap, 1)) { "Official hand fixture was not detected" }
+            val classifier = CustomPoseClassifier()
+            for (profile in PoseRecognitionProfile.entries) {
+                assertEquals(PoseId.THUMBS_UP, classifier.classify(pose.landmarks, aspect, profile))
+            }
+        } finally {
+            engine.close()
+            if (!bitmap.isRecycled) bitmap.recycle()
+        }
+    }
+
+    @Test fun officialPointingFixtureRecognizesEveryScreenDirection() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val fixture = instrumentation.context.assets.open("pointing_up.jpg").use { checkNotNull(BitmapFactory.decodeStream(it)) }
+        try {
+            for ((rotation, expected) in listOf(0f to PoseId.POINTING_UP, 90f to PoseId.POINTING_LEFT,
+                180f to PoseId.POINTING_DOWN, 270f to PoseId.POINTING_RIGHT)) {
+                val rotated = Bitmap.createBitmap(fixture, 0, 0, fixture.width, fixture.height,
+                    Matrix().apply { postRotate(rotation) }, true)
+                val bitmap = checkNotNull(rotated.copy(Bitmap.Config.ARGB_8888, false))
+                if (rotated !== fixture) rotated.recycle()
+                val aspect = bitmap.width.toDouble() / bitmap.height
+                val engine = HandLandmarkerEngine(instrumentation.targetContext, TrackingConfig())
+                try {
+                    val pose = checkNotNull(engine.detect(bitmap, 1)) { "Pointing fixture was not detected at $rotation" }
+                    assertEquals("Pointing fixture at $rotation", expected,
+                        CustomPoseClassifier().classify(pose.landmarks, aspect, PoseRecognitionProfile.DIRECTION))
+                } finally {
+                    engine.close()
+                    if (!bitmap.isRecycled) bitmap.recycle()
+                }
+            }
+        } finally { fixture.recycle() }
+    }
 
     @Test fun packagedModelRunsOnWorkerAndRejectsDuplicateTimestamp() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()

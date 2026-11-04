@@ -42,6 +42,21 @@ class CustomSessionRecognitionTest {
         assertEquals(PoseId.POINTING_UP, process(2400, true).event)
     }
 
+    @Test fun passivePoseDiagnosticsNeverConfirmConsumeOrRearmActions() {
+        val session = SessionRecognition(NativeSettings(mode = GestureMode.POSE,
+            poseActions = PoseActions(enabled = true)), null, bounds)
+        for (time in 0L..800L step 100) assertEquals(PoseId.POINTING_UP, session.diagnosticPose(sample(time, true)))
+        fun process(time: Long) = session.process(sample(time, true), time, bounds, true).scroll!!.customPose!!
+        assertNull(process(1000).event)
+        assertNull(process(1100).event)
+        assertEquals(PoseId.POINTING_UP, process(1200).event)
+        session.targetChanged()
+        for (time in 1300L..1800L step 100) assertEquals(PoseId.CLOSED_HAND, session.diagnosticPose(sample(time, false)))
+        for (time in 1900L..2400L step 100) assertNull(process(time).event)
+        assertNull(session.diagnosticPose(HandTrackingResult(2500)))
+        assertNull(SessionRecognition(NativeSettings(), null, bounds).diagnosticPose(sample(100, true)))
+    }
+
     @Test fun backIsOnceAcrossHoldLossAndTargetChangeUntilRelease() = runTest {
         val settings = NativeSettings(mode = GestureMode.POSE,
             poseActions = PoseActions(enabled = true).withBinding(PoseId.POINTING_UP, PoseAction.BACK))

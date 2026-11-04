@@ -79,11 +79,31 @@ main-screen tab state while practice is open. Nothing is applied by route change
 
 Each ImageProxy closes once in finally. Initialization, inference, and disposal share one bounded worker; no per-frame coroutine or unbounded request queue. Closed controllers coalesce/discard results and suppress stale callbacks. UI diagnostics update at most twice/sec, with inference metrics at most once/sec. Camera FPS means analyzer deliveries; CameraX's internal dropped-frame count is unavailable, and is not fabricated.
 
+Scroll hand-presence diagnostics update from accepted camera results before action
+eligibility checks. Custom actions remain blocked over Scroll Vision and unsafe
+targets, but that does not hide a detected hand in Home/Diagnostics. Hand presence
+does not mean that a pose is recognized or that a screen action is allowed.
+While a custom-action target is blocked, fresh results also receive passive pose
+classification for Diagnostics. This does not advance confirmation, consume a pose
+or release a target fence. Custom finger joint angles include landmark depth,
+with aspect correction; screen direction and visibility remain screen-based.
+An extended thumb retains the configured entry threshold at its base joint, while
+its IP joint uses the existing exit-angle threshold to allow a slight natural bend.
+Closed-thumb recognition uses 3D tip-to-palm proximity rather than requiring a
+sharp bend at one particular joint, allowing a thumb resting across the knuckles.
+
 ## Gesture arbitration and external actions
 
 With custom pose actions off, HYBRID and POSE include the native tap extension; CONTINUOUS and FLICK isolate their movement detectors. Pose/flick candidate, latch and cooldown ownership suppress competitors. Suppression resets continuous history. Native pose rearming uses elapsed time only, with a 200–3000ms Settings slider (default 450ms). After the interval, fresh confirmation permits another action, including held pointing/thumbs-up poses and direct up/down changes. Open hand (`NEUTRAL`) sends one pause tap per presentation and suppresses movement while held; its tap debounce survives tracking loss and clears on a recognized non-open pose. It never releases the timer. A vertically extended thumb with the other four fingers curled sends a double tap. Tracking loss discards candidates, while valid monotonic timestamps can expire the timer without a hand. The original open-hand/stable-pose rearm remains available with `tapGesturesEnabled=false` for the unchanged Dart compatibility fixtures.
 
 In the legacy path, down pose/flick -> forward; up -> backward; inversion applies once and does not affect taps. Continuous motion uses the same velocity/sensitivity/EMA mapping, rendered as bounded 100ms proportional touchscreen strokes. This is an intentional adapter difference from Flutter's per-frame ListView ticker: small strokes can be below another app's touch threshold. Taps use the content center and 50ms stationary strokes; double tap is two sequential strokes in one dispatch, separated by up to 100ms within Android's double-tap timeout. No delayed backlog of actions is retained. Busy, stale, inactive, disconnected, locked, system and own-app targets reject all output, including taps. The overlay's actual bounds are excluded from the gesture path; center taps use a clear column if the widget occupies the center.
+
+Native pointing left/right also works with custom actions off. It uses the existing
+horizontal adapter and the same confirmation/timed rearm as vertical pointing,
+without direction inversion. The compatibility configuration keeps horizontal
+pointing disabled for unchanged historical Dart fixtures. The custom direction
+profile defaults left/right to the matching horizontal actions; saved bindings
+remain authoritative.
 
 With custom actions enabled in Scroll POSE/HYBRID, the recognition snapshot
 selects one exclusive direction/finger profile and shared open, closed and thumbs-up

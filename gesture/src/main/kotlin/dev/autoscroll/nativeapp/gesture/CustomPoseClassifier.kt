@@ -16,10 +16,12 @@ class CustomPoseClassifier(private val config: HandPoseDetectionConfig = HandPos
         fun angle(a: Int, b: Int, c: Int): Double {
             val ax = (points[a].x - points[b].x) * aspect
             val ay = points[a].y - points[b].y
+            val az = (points[a].z - points[b].z) * aspect
             val bx = (points[c].x - points[b].x) * aspect
             val by = points[c].y - points[b].y
-            val denominator = hypot(ax, ay) * hypot(bx, by)
-            return if (denominator <= 1e-12) 0.0 else acos(((ax * bx + ay * by) / denominator).coerceIn(-1.0, 1.0)) * 180 / PI
+            val bz = (points[c].z - points[b].z) * aspect
+            val denominator = hypot(hypot(ax, ay), az) * hypot(hypot(bx, by), bz)
+            return if (denominator <= 1e-12) 0.0 else acos(((ax * bx + ay * by + az * bz) / denominator).coerceIn(-1.0, 1.0)) * 180 / PI
         }
         val palm = distance(0, 9)
         if (palm <= 1e-9) return null
@@ -43,8 +45,10 @@ class CustomPoseClassifier(private val config: HandPoseDetectionConfig = HandPos
             val fingers = listOf(5, 9, 13, 17).map(::finger)
             // Thumb bends at different joints and closes toward the palm, unlike the long fingers.
             val thumb = when {
-                angle(1, 2, 3) >= openAngle && angle(2, 3, 4) >= openAngle && distance(4, 0) > distance(2, 0) -> Finger.OPEN
-                angle(1, 2, 3) <= closedAngle && distance(4, 9) < palm * (if (exit) 1.15 else 1.0) -> Finger.CLOSED
+                // A naturally extended thumb can retain a slight bend at its IP joint.
+                angle(1, 2, 3) >= openAngle && angle(2, 3, 4) >= config.exitIndexAngle && distance(4, 0) > distance(2, 0) -> Finger.OPEN
+                hypot(distance(4, 9), (points[4].z - points[9].z) * aspect) <
+                    hypot(palm, (points[0].z - points[9].z) * aspect) * (if (exit) 1.15 else 1.0) -> Finger.CLOSED
                 else -> Finger.UNKNOWN
             }
             if (fingers.any { it == Finger.UNKNOWN } || thumb == Finger.UNKNOWN) return null
