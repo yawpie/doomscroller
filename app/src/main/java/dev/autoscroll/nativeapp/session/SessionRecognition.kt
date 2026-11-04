@@ -28,12 +28,11 @@ internal class SessionRecognition(settings: NativeSettings, area: PointerArea?, 
     val pointer = if (settings.controlMode == ControlMode.POINTER) PointerDetector().also { it.calibrate(area) } else null
     private val diagnosticClassifier = if (gestures != null && settings.poseActions.enabled &&
         (settings.mode == GestureMode.POSE || settings.mode == GestureMode.HYBRID)) CustomPoseClassifier(settings.pose) else null
-    private val profile = settings.poseActions.profile
     fun viewportChanged(currentBounds: SwipeBounds, currentRotation: Int) = bounds != currentBounds || rotation != currentRotation
 
     // Passive geometry must not confirm, latch or rearm actions while their target is blocked.
     fun diagnosticPose(result: HandTrackingResult): PoseId? = result.pose?.let {
-        diagnosticClassifier?.classify(it.landmarks, result.uprightAspectRatio, profile)
+        diagnosticClassifier?.classify(it.landmarks, result.uprightAspectRatio)
     }
 
     fun process(result: HandTrackingResult, nowMs: Long, currentBounds: SwipeBounds, eligible: Boolean): SessionDecision {

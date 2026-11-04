@@ -15,10 +15,10 @@ import dev.autoscroll.nativeapp.gesture.*
 import dev.autoscroll.nativeapp.settings.*
 
 internal fun poseIdLabel(pose: PoseId) = when (pose) {
-    PoseId.POINTING_UP -> "Point up"; PoseId.POINTING_DOWN -> "Point down"
+    PoseId.POINTING_UP -> "Point up / index finger up"; PoseId.POINTING_DOWN -> "Point down"
     PoseId.POINTING_LEFT -> "Point left"; PoseId.POINTING_RIGHT -> "Point right"
-    PoseId.INDEX_ONLY -> "Index finger only"; PoseId.MIDDLE_ONLY -> "Middle finger only"
-    PoseId.INDEX_MIDDLE -> "Index and middle fingers"; PoseId.OPEN_HAND -> "Open hand"
+    PoseId.MIDDLE_ONLY -> "Middle finger only"
+    PoseId.INDEX_MIDDLE -> "Index and middle up"; PoseId.OPEN_HAND -> "Open hand"
     PoseId.CLOSED_HAND -> "Closed hand"; PoseId.THUMBS_UP -> "Thumbs-up"
 }
 internal fun poseActionLabel(action: PoseAction) = when (action) {
@@ -27,16 +27,18 @@ internal fun poseActionLabel(action: PoseAction) = when (action) {
     PoseAction.SCROLL_LEFT -> "Scroll left once"; PoseAction.SCROLL_RIGHT -> "Scroll right once"
     PoseAction.DOUBLE_TAP -> "Double tap"; PoseAction.BACK -> "Back"
     PoseAction.CONTINUOUS_NEXT -> "Scroll next while held"; PoseAction.CONTINUOUS_PREVIOUS -> "Scroll previous while held"
+    PoseAction.CONTINUOUS_LEFT -> "Scroll left while held"; PoseAction.CONTINUOUS_RIGHT -> "Scroll right while held"
 }
-private fun actionDescription(action: PoseAction) = when (action) {
+private fun actionDescription(action: PoseAction, autoscroll: Boolean) = when (action) {
     PoseAction.NONE -> "No pose action. In Hybrid, flick and movement can still work."
-    PoseAction.NEXT_ITEM, PoseAction.PREVIOUS_ITEM -> "One vertical swipe per appearance."
-    PoseAction.SCROLL_LEFT -> "View content to the left with one rightward swipe per appearance."
-    PoseAction.SCROLL_RIGHT -> "View content to the right with one leftward swipe per appearance."
+    PoseAction.NEXT_ITEM, PoseAction.PREVIOUS_ITEM -> if (autoscroll) "Scroll vertically while this pointing pose is held." else "One vertical swipe per appearance."
+    PoseAction.SCROLL_LEFT -> if (autoscroll) "Scroll left while this pointing pose is held." else "View content to the left with one rightward swipe per appearance."
+    PoseAction.SCROLL_RIGHT -> if (autoscroll) "Scroll right while this pointing pose is held." else "View content to the right with one leftward swipe per appearance."
     PoseAction.SINGLE_TAP -> "One tap at the center of the content."
     PoseAction.DOUBLE_TAP -> "Two taps at the center; the target decides the result."
     PoseAction.BACK -> "Return to the previous screen, not the previous feed item."
-    PoseAction.CONTINUOUS_NEXT, PoseAction.CONTINUOUS_PREVIOUS -> "Scroll while the confirmed pose remains visible."
+    PoseAction.CONTINUOUS_NEXT, PoseAction.CONTINUOUS_PREVIOUS,
+    PoseAction.CONTINUOUS_LEFT, PoseAction.CONTINUOUS_RIGHT -> "Scroll while the confirmed pose remains visible."
 }
 internal fun poseActionsInactiveReason(settings: NativeSettings): String? = when {
     !settings.poseActions.enabled -> "Custom pose actions are off."
@@ -57,32 +59,32 @@ internal fun PoseActionsPanel(value: NativeSettings, update: (NativeSettings) ->
     }
     poseActionsInactiveReason(value)?.let { Text(it) }
     if (actions.enabled) {
-        Text("Choose one recognition profile. Both groups remain editable; common poses are shared.")
-        PoseRecognitionProfile.entries.forEach { profile ->
-            Row(Modifier.fillMaxWidth().selectable(actions.profile == profile, role = Role.RadioButton,
-                onClick = { update(value.copy(poseActions = actions.copy(profile = profile))) }).heightIn(min = 48.dp),
-                verticalAlignment = Alignment.CenterVertically) {
-                RadioButton(actions.profile == profile, onClick = null)
-                Text(if (profile == PoseRecognitionProfile.DIRECTION) "Pointing directions" else "Finger combinations")
-            }
+        Text("Pointing directions and finger combinations work together. Point up and index finger up are one pose.")
+        Row(Modifier.fillMaxWidth().toggleable(actions.autoscrollPointing, role = Role.Switch,
+            onValueChange = { update(value.copy(poseActions = actions.copy(autoscrollPointing = it))) }).heightIn(min = 48.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            Text("Autoscroll while pointing", modifier = Modifier.weight(1f))
+            Switch(actions.autoscrollPointing, onCheckedChange = null)
         }
-        listOf(PoseRecognitionProfile.DIRECTION, PoseRecognitionProfile.FINGER_COMBINATIONS, null).forEach { profile ->
-            val title = when (profile) { PoseRecognitionProfile.DIRECTION -> "Pointing directions"; PoseRecognitionProfile.FINGER_COMBINATIONS -> "Finger combinations"; null -> "Common poses" }
-            Text(title + if (profile != null && profile != actions.profile) " · inactive profile" else "", style = MaterialTheme.typography.titleSmall)
-            PoseId.entries.filter { it.profile == profile }.forEach { pose ->
-                OutlinedButton(onClick = { selected = pose }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+        Text("When on, chosen pointing scroll actions run continuously while held; release to stop. You can still edit every pointing action. Tap, Back and No action keep their selected behavior.")
+        listOf("Pointing directions" to PoseId.entries.filter { it.isPointing },
+            "Finger combinations" to listOf(PoseId.MIDDLE_ONLY, PoseId.INDEX_MIDDLE),
+            "Common poses" to listOf(PoseId.OPEN_HAND, PoseId.CLOSED_HAND, PoseId.THUMBS_UP)).forEach { (title, poses) ->
+            Text(title, style = MaterialTheme.typography.titleSmall)
+            poses.forEach { pose ->
+                OutlinedButton(onClick = { selected = pose },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                     OutlinedCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
                 PoseIllustration(pose)
-                Text("${poseIdLabel(pose)}: ${poseActionLabel(actions.bindings.getValue(pose))}")
+                Text("${poseIdLabel(pose)}: ${poseActionLabel(actions.actionFor(pose))}")
             }
         }
                 }
             }
         }
-        Text("Index and middle together has its own action; it does not run either single-finger action. Keep the other fingers and thumb folded. Open hand means all five fingers open; closed hand keeps the thumb close to the fist. Thumbs-up extends the thumb with four fingers curled.")
-        if (PoseId.entries.filter { it.profile == null || it.profile == actions.profile }.all { actions.actionFor(it) == PoseAction.NONE })
-            Text("No pose actions are active in this profile.")
+        Text("Raise index and middle together for their own action, continuous next by default. Keep the other fingers and thumb folded. Open hand means all five fingers open; closed hand keeps the thumb close to the fist. Thumbs-up extends the thumb with four fingers curled.")
+        if (PoseId.entries.all { actions.actionFor(it) == PoseAction.NONE }) Text("No pose actions are active.")
     }
     OutlinedButton(onClick = { update(value.reset(SettingsGroup.POSE_ACTIONS)) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Reset pose actions") }
     if (onPractice != null) TextButton(onClick = onPractice, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Try in Practice") }
@@ -94,7 +96,7 @@ internal fun PoseActionsPanel(value: NativeSettings, update: (NativeSettings) ->
                         onClick = { update(value.copy(poseActions = actions.withBinding(pose, action))); selected = null }).heightIn(min = 48.dp),
                         verticalAlignment = Alignment.CenterVertically) {
                         RadioButton(actions.bindings[pose] == action, onClick = null)
-                        Column { Text(poseActionLabel(action)); Text(actionDescription(action), style = MaterialTheme.typography.bodySmall) }
+                        Column { Text(poseActionLabel(action)); Text(actionDescription(action, actions.autoscrollPointing && pose.isPointing), style = MaterialTheme.typography.bodySmall) }
                     }
                 }
             }
@@ -105,17 +107,18 @@ internal fun PoseActionsPanel(value: NativeSettings, update: (NativeSettings) ->
 @Composable
 internal fun SavedPoseActionsGuide(settings: NativeSettings) {
     val actions = settings.poseActions
-    Text("Custom pose actions · ${if (actions.profile == PoseRecognitionProfile.DIRECTION) "Pointing directions" else "Finger combinations"}", style = MaterialTheme.typography.titleMedium)
+    Text("Custom pose actions · Combined poses", style = MaterialTheme.typography.titleMedium)
     poseActionsInactiveReason(settings)?.let { Text(it) }
-    PoseId.entries.filter { it.profile == null || it.profile == actions.profile }.forEach { pose ->
+    Text("Autoscroll while pointing: ${if (actions.autoscrollPointing) "On" else "Off"}")
+    PoseId.entries.forEach { pose ->
         OutlinedCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
                 PoseIllustration(pose)
-                Text("${poseIdLabel(pose)}: ${poseActionLabel(actions.bindings.getValue(pose))}")
+                Text("${poseIdLabel(pose)}: ${poseActionLabel(actions.actionFor(pose))}")
             }
         }
     }
     Text("No action means this pose sends no action; in Hybrid, flick and movement can still work.")
-    Text("Single actions run once per appearance. Continuous actions run while the confirmed pose is held. Index and middle together has its own action. Open hand uses all five fingers; closed hand keeps the thumb close to the fist; thumbs-up extends the thumb with the other fingers curled.")
+    Text("Single actions run once per appearance. Continuous actions stop when the pose is released. Point up and index finger up are one pose; index and middle together must point up. Open hand uses all five fingers; closed hand keeps the thumb close to the fist; thumbs-up extends the thumb with the other fingers curled.")
     Text("Custom pose scroll follows the selected action; reverse direction still affects flick and hand movement.")
 }

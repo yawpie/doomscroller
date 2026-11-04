@@ -9,8 +9,6 @@ import org.junit.Test
 class CustomPoseTest {
     private val config = HandPoseDetectionConfig(confirmationDurationMs = 180, releaseDurationMs = 180,
         minimumObservations = 3, maximumSampleGapMs = 250, cooldownMs = 450)
-    private val direction = PoseRecognitionProfile.DIRECTION
-    private val combinations = PoseRecognitionProfile.FINGER_COMBINATIONS
 
     private fun points(open: Set<Int>, thumbOpen: Boolean = false, rotation: Double = 0.0,
         mirror: Boolean = false, aspect: Double = 1.0): List<HandLandmark> {
@@ -34,11 +32,10 @@ class CustomPoseTest {
         }
     }
 
-    @Test fun exactFingerStatesAndProfilesHaveOneCanonicalResult() {
+    @Test fun pointingAndFingerCombinationsHaveOneCanonicalResultTogether() {
         val classifier = CustomPoseClassifier(config)
-        fun classify(open: Set<Int>, thumb: Boolean = false, profile: PoseRecognitionProfile = combinations) =
-            classifier.classify(points(open, thumb), 1.0, profile)
-        assertEquals(PoseId.INDEX_ONLY, classify(setOf(5)))
+        fun classify(open: Set<Int>, thumb: Boolean = false) = classifier.classify(points(open, thumb), 1.0)
+        assertEquals(PoseId.POINTING_UP, classify(setOf(5)))
         assertEquals(PoseId.MIDDLE_ONLY, classify(setOf(9)))
         assertEquals(PoseId.INDEX_MIDDLE, classify(setOf(5, 9)))
         assertEquals(PoseId.OPEN_HAND, classify(setOf(5, 9, 13, 17), true))
@@ -46,13 +43,13 @@ class CustomPoseTest {
         assertEquals(PoseId.THUMBS_UP, classify(emptySet(), true))
         assertNull(classify(setOf(9, 13)))
         assertNull(classify(setOf(5, 9, 13)))
-        assertNull(classify(setOf(5, 9), profile = direction))
-        assertEquals(PoseId.POINTING_UP, classify(setOf(5), profile = direction))
         assertNull(classify(setOf(5), thumb = true))
         for (rotation in listOf(0.0, PI / 2, PI, -PI / 2)) for (mirror in listOf(false, true)) {
-            for ((open, expected) in listOf(setOf(5) to PoseId.INDEX_ONLY, setOf(9) to PoseId.MIDDLE_ONLY,
-                setOf(5, 9) to PoseId.INDEX_MIDDLE)) {
-                assertEquals(expected, classifier.classify(points(open, rotation = rotation, mirror = mirror), 1.0, combinations))
+            val pointing = when (rotation) { 0.0 -> PoseId.POINTING_UP; PI / 2 -> PoseId.POINTING_RIGHT;
+                PI -> PoseId.POINTING_DOWN; else -> PoseId.POINTING_LEFT }
+            for ((open, expected) in listOf(setOf(5) to pointing, setOf(9) to PoseId.MIDDLE_ONLY,
+                setOf(5, 9) to if (rotation == 0.0) PoseId.INDEX_MIDDLE else null)) {
+                assertEquals(expected, classifier.classify(points(open, rotation = rotation, mirror = mirror), 1.0))
             }
         }
     }
@@ -62,29 +59,29 @@ class CustomPoseTest {
         for ((angle, expected) in listOf(0.0 to PoseId.POINTING_UP, PI / 2 to PoseId.POINTING_RIGHT,
             PI to PoseId.POINTING_DOWN, -PI / 2 to PoseId.POINTING_LEFT)) {
             for (aspect in listOf(0.75, 1.0, 1.5)) for (mirror in listOf(false, true)) {
-                assertEquals(expected, classifier.classify(points(setOf(5), rotation = angle, mirror = mirror, aspect = aspect), aspect, direction))
+                assertEquals(expected, classifier.classify(points(setOf(5), rotation = angle, mirror = mirror, aspect = aspect), aspect))
             }
         }
         val boundary = points(setOf(5), rotation = 0.65)
-        assertNull(classifier.classify(boundary, 1.0, direction))
-        assertEquals(PoseId.POINTING_UP, classifier.classify(boundary, 1.0, direction, PoseId.POINTING_UP))
+        assertNull(classifier.classify(boundary, 1.0))
+        assertEquals(PoseId.POINTING_UP, classifier.classify(boundary, 1.0, PoseId.POINTING_UP))
         for ((angle, active) in listOf(0.0 to PoseId.POINTING_UP, PI / 2 to PoseId.POINTING_RIGHT,
             PI to PoseId.POINTING_DOWN, -PI / 2 to PoseId.POINTING_LEFT)) {
             for (offset in listOf(-0.78, 0.78)) {
                 val diagonal = points(setOf(5), rotation = angle + offset)
-                assertNull(classifier.classify(diagonal, 1.0, direction))
-                assertEquals(active, classifier.classify(diagonal, 1.0, direction, active))
+                assertNull(classifier.classify(diagonal, 1.0))
+                assertEquals(active, classifier.classify(diagonal, 1.0, active))
             }
         }
-        assertNull(classifier.classify(points(setOf(5), rotation = PI / 4), 1.0, direction))
+        assertNull(classifier.classify(points(setOf(5), rotation = PI / 4), 1.0))
         val invalid = points(setOf(5)).toMutableList()
         invalid[8] = invalid[8].copy(x = 0.0)
-        assertNull(classifier.classify(invalid, 1.0, direction))
+        assertNull(classifier.classify(invalid, 1.0))
         invalid[8] = invalid[7].copy(index = 8)
-        assertNull(classifier.classify(invalid, 1.0, direction))
+        assertNull(classifier.classify(invalid, 1.0))
         val half = points(setOf(5)).toMutableList()
         half[7] = half[7].copy(x = half[7].x + 0.04, y = half[6].y - 0.04)
-        assertNull(classifier.classify(half, 1.0, combinations))
+        assertNull(classifier.classify(half, 1.0))
     }
 
     @Test fun tiltedHandKeepsFingerIdentityAndPointingDirectionsAcrossTransitions() {
@@ -111,7 +108,7 @@ class CustomPoseTest {
         val classifier = CustomPoseClassifier(config)
         for (aspect in listOf(0.75, 1.0, 1.5)) for (mirror in listOf(false, true)) {
             val up = tilted(0.0, mirror, aspect)
-            assertEquals(PoseId.INDEX_ONLY, classifier.classify(up, aspect, combinations))
+            assertEquals(PoseId.POINTING_UP, classifier.classify(up, aspect))
             val detector = CustomPoseDetector(PoseActions(enabled = true), config)
             for ((i, entry) in listOf(up to PoseId.POINTING_UP,
                 tilted(-PI / 2, mirror, aspect) to PoseId.POINTING_LEFT,
@@ -128,11 +125,11 @@ class CustomPoseTest {
 
     @Test fun depthFoldedIndexIsRejectedWhileDepthTranslationPreservesPose() {
         val classifier = CustomPoseClassifier(config)
-        assertEquals(PoseId.POINTING_UP, classifier.classify(points(setOf(5)).map { it.copy(z = -10.0) }, 1.0, direction))
+        assertEquals(PoseId.POINTING_UP, classifier.classify(points(setOf(5)).map { it.copy(z = -10.0) }, 1.0))
         val bent = points(setOf(5)).toMutableList()
         bent[7] = bent[7].copy(z = 0.1)
-        assertNull(classifier.classify(bent, 1.0, direction))
-        assertNull(classifier.classify(bent, 1.0, combinations))
+        assertNull(classifier.classify(bent, 1.0))
+        assertNull(classifier.classify(bent, 1.0))
     }
 
     @Test fun extendedThumbAllowsNaturalIpBendAndFoldedTipBecomesClosedHand() {
@@ -143,10 +140,8 @@ class CustomPoseTest {
                 p[4] = p[4].copy(x = p[3].x + 0.06 * sin(bend), y = p[3].y - 0.06 * cos(bend))
                 return p.map { it.copy(x = 0.5 + (it.x - 0.5) * (if (mirror) -1 else 1) / aspect) }
             }
-            for (profile in PoseRecognitionProfile.entries) {
-                assertEquals(PoseId.THUMBS_UP, classifier.classify(thumb(PI / 8), aspect, profile))
-                assertEquals(PoseId.CLOSED_HAND, classifier.classify(thumb(PI / 3), aspect, profile))
-            }
+            assertEquals(PoseId.THUMBS_UP, classifier.classify(thumb(PI / 8), aspect))
+            assertEquals(PoseId.CLOSED_HAND, classifier.classify(thumb(PI / 3), aspect))
         }
     }
 
@@ -164,40 +159,40 @@ class CustomPoseTest {
                     it.copy(x = 0.5 + (x * cos(rotation) - y * sin(rotation)) / aspect,
                         y = 0.5 + x * sin(rotation) + y * cos(rotation))
                 }
-                assertEquals(expected, classifier.classify(transformed, aspect, direction))
+                assertEquals(expected, classifier.classify(transformed, aspect))
             }
         }
         p[4] = p[4].copy(z = -0.5)
-        assertNull(classifier.classify(p, 1.0, direction))
+        assertNull(classifier.classify(p, 1.0))
     }
 
     @Test fun discreteLatchSurvivesUnknownAndRequiresTimedValidRelease() {
-        val actions = PoseActions(enabled = true, profile = combinations).withBinding(PoseId.INDEX_ONLY, PoseAction.BACK)
+        val actions = PoseActions(enabled = true).withBinding(PoseId.POINTING_UP, PoseAction.BACK)
         val detector = CustomPoseDetector(actions, config)
         fun sample(t: Long, p: PoseId?) = detector.processPose(t, p)
-        assertNull(sample(0, PoseId.INDEX_ONLY).event)
-        assertNull(sample(100, PoseId.INDEX_ONLY).event)
-        assertEquals(PoseId.INDEX_ONLY, sample(200, PoseId.INDEX_ONLY).event)
+        assertNull(sample(0, PoseId.POINTING_UP).event)
+        assertNull(sample(100, PoseId.POINTING_UP).event)
+        assertEquals(PoseId.POINTING_UP, sample(200, PoseId.POINTING_UP).event)
         sample(300, null)
-        for (t in 400L..1200L step 100) assertNull(sample(t, PoseId.INDEX_ONLY).event)
+        for (t in 400L..1200L step 100) assertNull(sample(t, PoseId.POINTING_UP).event)
         sample(1300, PoseId.CLOSED_HAND)
         sample(1400, null)
         sample(1500, PoseId.CLOSED_HAND)
         sample(1600, PoseId.CLOSED_HAND)
         sample(1700, PoseId.CLOSED_HAND)
-        sample(1800, PoseId.INDEX_ONLY)
-        sample(1900, PoseId.INDEX_ONLY)
-        assertEquals(PoseId.INDEX_ONLY, sample(2000, PoseId.INDEX_ONLY).event)
+        sample(1800, PoseId.POINTING_UP)
+        sample(1900, PoseId.POINTING_UP)
+        assertEquals(PoseId.POINTING_UP, sample(2000, PoseId.POINTING_UP).event)
     }
 
     @Test fun holdStopsImmediatelyAndRequiresNewConfirmationAndTargetRelease() {
-        val actions = PoseActions(enabled = true, profile = combinations)
-            .withBinding(PoseId.INDEX_ONLY, PoseAction.CONTINUOUS_NEXT)
+        val actions = PoseActions(enabled = true)
+            .withBinding(PoseId.POINTING_UP, PoseAction.CONTINUOUS_NEXT)
             .withBinding(PoseId.INDEX_MIDDLE, PoseAction.CONTINUOUS_NEXT)
         val detector = CustomPoseDetector(actions, config)
         fun sample(t: Long, p: PoseId?) = detector.processPose(t, p)
-        sample(0, PoseId.INDEX_ONLY); sample(100, PoseId.INDEX_ONLY)
-        assertEquals(PoseId.INDEX_ONLY, sample(200, PoseId.INDEX_ONLY).held)
+        sample(0, PoseId.POINTING_UP); sample(100, PoseId.POINTING_UP)
+        assertEquals(PoseId.POINTING_UP, sample(200, PoseId.POINTING_UP).held)
         assertNull(sample(300, PoseId.INDEX_MIDDLE).held)
         sample(400, PoseId.INDEX_MIDDLE)
         assertEquals(PoseId.INDEX_MIDDLE, sample(500, PoseId.INDEX_MIDDLE).held)
@@ -212,15 +207,15 @@ class CustomPoseTest {
     }
 
     @Test fun timestampAndGapDiscardEvidenceAndNoneNeverOwns() {
-        val detector = CustomPoseDetector(PoseActions(enabled = true, profile = combinations)
-            .withBinding(PoseId.INDEX_ONLY, PoseAction.BACK), config)
+        val detector = CustomPoseDetector(PoseActions(enabled = true)
+            .withBinding(PoseId.POINTING_UP, PoseAction.BACK).withBinding(PoseId.INDEX_MIDDLE, PoseAction.NONE), config)
         fun sample(t: Long, p: PoseId?) = detector.processPose(t, p)
-        sample(0, PoseId.INDEX_ONLY); sample(100, PoseId.INDEX_ONLY)
-        assertNull(sample(100, PoseId.INDEX_ONLY).event)
-        sample(200, PoseId.INDEX_ONLY); sample(300, PoseId.INDEX_ONLY)
-        assertNull(sample(600, PoseId.INDEX_ONLY).event)
-        sample(700, PoseId.INDEX_ONLY)
-        assertEquals(PoseId.INDEX_ONLY, sample(800, PoseId.INDEX_ONLY).event)
+        sample(0, PoseId.POINTING_UP); sample(100, PoseId.POINTING_UP)
+        assertNull(sample(100, PoseId.POINTING_UP).event)
+        sample(200, PoseId.POINTING_UP); sample(300, PoseId.POINTING_UP)
+        assertNull(sample(600, PoseId.POINTING_UP).event)
+        sample(700, PoseId.POINTING_UP)
+        assertEquals(PoseId.POINTING_UP, sample(800, PoseId.POINTING_UP).event)
         sample(900, PoseId.INDEX_MIDDLE)
         assertFalse(detector.ownsGesture)
     }
@@ -233,8 +228,8 @@ class CustomPoseTest {
     }
 
     @Test fun hybridNoneAllowsMotionAndActivePoseOwnsWithoutFallback() {
-        val inactive = PoseActions(enabled = true, profile = combinations)
-            .withBinding(PoseId.INDEX_ONLY, PoseAction.BACK)
+        val inactive = PoseActions(enabled = true)
+            .withBinding(PoseId.POINTING_UP, PoseAction.BACK).withBinding(PoseId.INDEX_MIDDLE, PoseAction.NONE)
         val coordinator = GestureCoordinator(mode = GestureMode.HYBRID, poseActions = inactive)
         val combined = HandPose(points(setOf(5, 9)))
         for (t in 0L..500L step 100) {
@@ -248,34 +243,34 @@ class CustomPoseTest {
     }
 
     @Test fun targetChangeCannotRearmAConsumedDiscretePose() {
-        val detector = CustomPoseDetector(PoseActions(enabled = true, profile = combinations)
-            .withBinding(PoseId.INDEX_ONLY, PoseAction.BACK), config)
-        for (t in 0L..200L step 100) detector.processPose(t, PoseId.INDEX_ONLY)
+        val detector = CustomPoseDetector(PoseActions(enabled = true)
+            .withBinding(PoseId.POINTING_UP, PoseAction.BACK), config)
+        for (t in 0L..200L step 100) detector.processPose(t, PoseId.POINTING_UP)
         detector.targetChanged()
-        for (t in 300L..1000L step 100) assertNull(detector.processPose(t, PoseId.INDEX_ONLY).event)
+        for (t in 300L..1000L step 100) assertNull(detector.processPose(t, PoseId.POINTING_UP).event)
         for (t in 1100L..1300L step 100) detector.processPose(t, PoseId.CLOSED_HAND)
-        detector.processPose(1400, PoseId.INDEX_ONLY)
-        detector.processPose(1500, PoseId.INDEX_ONLY)
-        assertEquals(PoseId.INDEX_ONLY, detector.processPose(1600, PoseId.INDEX_ONLY).event)
+        detector.processPose(1400, PoseId.POINTING_UP)
+        detector.processPose(1500, PoseId.POINTING_UP)
+        assertEquals(PoseId.POINTING_UP, detector.processPose(1600, PoseId.POINTING_UP).event)
     }
 
     @Test fun targetFenceSurvivesLossAndRepeatedTargetChanges() {
-        val detector = CustomPoseDetector(PoseActions(enabled = true, profile = combinations)
-            .withBinding(PoseId.INDEX_ONLY, PoseAction.CONTINUOUS_NEXT), config)
-        for (t in 0L..200L step 100) detector.processPose(t, PoseId.INDEX_ONLY)
+        val detector = CustomPoseDetector(PoseActions(enabled = true)
+            .withBinding(PoseId.POINTING_UP, PoseAction.CONTINUOUS_NEXT), config)
+        for (t in 0L..200L step 100) detector.processPose(t, PoseId.POINTING_UP)
         detector.processPose(300, null)
         detector.targetChanged()
         detector.processPose(400, PoseId.CLOSED_HAND)
         detector.targetChanged()
-        for (t in 500L..1000L step 100) assertNull(detector.processPose(t, PoseId.INDEX_ONLY).held)
+        for (t in 500L..1000L step 100) assertNull(detector.processPose(t, PoseId.POINTING_UP).held)
         for (t in 1100L..1300L step 100) detector.processPose(t, PoseId.CLOSED_HAND)
-        detector.processPose(1400, PoseId.INDEX_ONLY)
-        detector.processPose(1500, PoseId.INDEX_ONLY)
-        assertEquals(PoseId.INDEX_ONLY, detector.processPose(1600, PoseId.INDEX_ONLY).held)
+        detector.processPose(1400, PoseId.POINTING_UP)
+        detector.processPose(1500, PoseId.POINTING_UP)
+        assertEquals(PoseId.POINTING_UP, detector.processPose(1600, PoseId.POINTING_UP).held)
     }
 
     @Test fun existingFlickOwnershipCannotBeStolenByPoseCandidate() {
-        val actions = PoseActions(enabled = true, profile = combinations).withBinding(PoseId.INDEX_ONLY, PoseAction.BACK)
+        val actions = PoseActions(enabled = true).withBinding(PoseId.POINTING_UP, PoseAction.BACK)
         val coordinator = GestureCoordinator(mode = GestureMode.HYBRID, poseActions = actions)
         val base = points(setOf(9))
         fun shifted(t: Long, y: Double, p: List<HandLandmark> = base) = HandTrackingResult(t,
@@ -286,5 +281,44 @@ class CustomPoseTest {
         val decision = coordinator.process(shifted(200, 0.16, points(setOf(5))))
         assertNull(decision.customPose?.pose)
         assertNull(decision.customPose?.event)
+    }
+
+    @Test fun twoFingerUpUsesItsOwnHoldAndDefaultPointingScrollsStayHeld() {
+        val detector = CustomPoseDetector(PoseActions(enabled = true), config)
+        fun sample(t: Long, open: Set<Int>) = detector.process(HandTrackingResult(t, HandPose(points(open))))
+        sample(0, setOf(5)); sample(100, setOf(5))
+        assertEquals(PoseId.POINTING_UP, sample(200, setOf(5)).event)
+        sample(300, setOf(5, 9)); sample(400, setOf(5, 9))
+        val combined = sample(500, setOf(5, 9))
+        assertEquals(PoseId.INDEX_MIDDLE, combined.held)
+        assertNull(combined.event)
+        assertNull(sample(600, emptySet()).held)
+        for (pose in PoseId.entries.filter { it.isPointing }) {
+            val auto = CustomPoseDetector(PoseActions(enabled = true, autoscrollPointing = true), config)
+            auto.processPose(0, pose); auto.processPose(100, pose)
+            for (t in 200L..800L step 100) {
+                val result = auto.processPose(t, pose)
+                assertEquals(pose, result.held)
+                assertNull(result.event)
+            }
+            assertNull(auto.processPose(900, null).held)
+        }
+        val diagonal = points(setOf(5, 9), rotation = 0.65)
+        assertNull(CustomPoseClassifier(config).classify(diagonal, 1.0))
+        assertEquals(PoseId.INDEX_MIDDLE, CustomPoseClassifier(config).classify(diagonal, 1.0, PoseId.INDEX_MIDDLE))
+    }
+
+    @Test fun editedPointingActionChoosesHoldDiscreteOrNoneWhileAutoscrollStaysOn() {
+        for (action in listOf(PoseAction.SCROLL_LEFT, PoseAction.BACK, PoseAction.NONE)) {
+            val detector = CustomPoseDetector(PoseActions(enabled = true, autoscrollPointing = true)
+                .withBinding(PoseId.POINTING_UP, action), config)
+            detector.processPose(0, PoseId.POINTING_UP)
+            detector.processPose(100, PoseId.POINTING_UP)
+            val confirmed = detector.processPose(200, PoseId.POINTING_UP)
+            assertEquals(if (action == PoseAction.BACK) PoseId.POINTING_UP else null, confirmed.event)
+            assertEquals(if (action == PoseAction.SCROLL_LEFT) PoseId.POINTING_UP else null, confirmed.held)
+            assertEquals(action != PoseAction.NONE, detector.ownsGesture)
+            assertNull(detector.processPose(300, PoseId.POINTING_UP).event)
+        }
     }
 }

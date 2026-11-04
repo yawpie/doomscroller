@@ -30,7 +30,7 @@ class CustomPoseDetector(private val actions: PoseActions, private val config: H
         val previous = lastTime
         val active = candidate.takeIf { previous != null && result.timestampMs > previous &&
             result.timestampMs - previous <= config.maximumSampleGapMs }
-        val pose = result.pose?.let { classifier.classify(it.landmarks, result.uprightAspectRatio, actions.profile, active) }
+        val pose = result.pose?.let { classifier.classify(it.landmarks, result.uprightAspectRatio, active) }
         return processPose(result.timestampMs, pose)
     }
 

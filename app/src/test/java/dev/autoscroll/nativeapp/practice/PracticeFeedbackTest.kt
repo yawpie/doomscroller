@@ -72,10 +72,10 @@ class PracticeFeedbackTest {
             for ((pose, direction) in listOf(RecognizedHandPose.POINTING_LEFT to -1, RecognizedHandPose.POINTING_RIGHT to 1)) {
                 val feedback = PracticeFeedback(NativeSettings(mode = mode, inverted = inverted))
                 hold(feedback, pose, 0L..200L step 100)
-                assertEquals(2 + direction, feedback.state.horizontalPosition)
+                assertEquals(2.0 + direction, feedback.state.horizontalPosition, 0.0)
                 assertEquals(if (direction < 0) "Scroll left" else "Scroll right", feedback.state.lastAction)
                 hold(feedback, pose, 300L..1800L step 100)
-                assertEquals(if (direction < 0) 0 else 4, feedback.state.horizontalPosition)
+                assertEquals(if (direction < 0) 0.0 else 4.0, feedback.state.horizontalPosition, 0.0)
                 assertEquals(3, feedback.state.actionCount)
                 assertEquals(2.0, feedback.state.position, 0.0)
                 assertTrue(feedback.state.videoPlaying)

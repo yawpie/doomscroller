@@ -26,7 +26,7 @@ internal data class PracticeSample(
     val inactiveReason: String? = null,
     val holdActivations: Int = 0,
     val localDetailOpen: Boolean = false,
-    val horizontalPosition: Int = 2,
+    val horizontalPosition: Double = 2.0,
 )
 
 /** Recognition changes only this local sample. No screen-action executor exists here. */
@@ -84,10 +84,10 @@ internal class PracticeFeedback(private val settings: NativeSettings) {
         val velocity = if (decision.suppressesContinuous) 0.0 else mapper.map(decision.motion)
         val seconds = if (previous == null || result.timestampMs - previous > settings.scroll.staleAfterMs) 0.0
             else (result.timestampMs - previous).coerceAtMost(50) / 1000.0
-        val movement = if (direction == null) velocity * seconds / SAMPLE_HEIGHT_PX
+        val movement = if (direction == null) velocity * seconds / SAMPLE_PAGE_SIZE_PX
             else direction *
                 if (decision.flick != null && settings.scroll.flickAction == FlickScrollAction.FAST_SCROLL)
-                    settings.scroll.flickScrollDistance / SAMPLE_HEIGHT_PX else 1.0
+                    settings.scroll.flickScrollDistance / SAMPLE_PAGE_SIZE_PX else 1.0
         val action = when {
             direction != null -> if (movement > 0) "Next item" else "Previous item"
             resolved == PoseAction.SCROLL_LEFT -> "Scroll left"
@@ -103,7 +103,7 @@ internal class PracticeFeedback(private val settings: NativeSettings) {
                 PoseAction.SCROLL_LEFT -> -1
                 PoseAction.SCROLL_RIGHT -> 1
                 else -> 0
-            }).coerceIn(0, 4),
+            }).coerceIn(0.0, 4.0),
             videoPlaying = if (resolved == PoseAction.SINGLE_TAP) !state.videoPlaying else state.videoPlaying,
             doubleTaps = state.doubleTaps + if (resolved == PoseAction.DOUBLE_TAP) 1 else 0,
             actionCount = state.actionCount + if (decision.pose != null || decision.flick != null) 1 else 0,
@@ -128,16 +128,18 @@ internal class PracticeFeedback(private val settings: NativeSettings) {
         val sameHold = held != null && held == lastHeld && previous != null &&
             result.timestampMs - previous <= settings.pose.maximumSampleGapMs
         val seconds = if (sameHold) (result.timestampMs - previous!!) / 1000.0 else 0.0
-        val velocity = if (heldVelocity != 0.0) heldVelocity else if (decision.suppressesContinuous) 0.0 else mapper.map(decision.motion)
+        val horizontalVelocity = if (selected.isHorizontal) heldVelocity else 0.0
+        val velocity = if (horizontalVelocity != 0.0) 0.0 else if (heldVelocity != 0.0) heldVelocity
+            else if (decision.suppressesContinuous) 0.0 else mapper.map(decision.motion)
         val motionSeconds = if (previous == null || result.timestampMs - previous > settings.scroll.staleAfterMs) 0.0
             else (result.timestampMs - previous).coerceAtMost(50) / 1000.0
         val movement = when (discrete) {
             PoseAction.NEXT_ITEM, PoseAction.PREVIOUS_ITEM -> {
                 val distance = if (decision.flick != null && settings.scroll.flickAction == FlickScrollAction.FAST_SCROLL)
-                    settings.scroll.flickScrollDistance / SAMPLE_HEIGHT_PX else 1.0
+                    settings.scroll.flickScrollDistance / SAMPLE_PAGE_SIZE_PX else 1.0
                 distance * if (discrete == PoseAction.NEXT_ITEM) 1 else -1
             }
-            else -> velocity * (if (heldVelocity != 0.0) seconds else motionSeconds) / SAMPLE_HEIGHT_PX
+            else -> velocity * (if (heldVelocity != 0.0) seconds else motionSeconds) / SAMPLE_PAGE_SIZE_PX
         }
         val activated = held != null && !sameHold
         val action = when (discrete) {
@@ -148,15 +150,16 @@ internal class PracticeFeedback(private val settings: NativeSettings) {
             PoseAction.SINGLE_TAP -> "Tap video"
             PoseAction.DOUBLE_TAP -> "Double tap"
             PoseAction.BACK -> if (state.localDetailOpen) "Back to sample list" else "Already at sample root"
-            else -> if (heldVelocity > 0) "Scrolling to next item" else if (heldVelocity < 0) "Scrolling to previous item"
+            else -> if (horizontalVelocity > 0) "Scrolling right" else if (horizontalVelocity < 0) "Scrolling left"
+                else if (heldVelocity > 0) "Scrolling to next item" else if (heldVelocity < 0) "Scrolling to previous item"
                 else if (velocity > 0) "Moving to next item" else if (velocity < 0) "Moving to previous item" else state.lastAction
         }
         state = state.copy(position = (state.position + movement).coerceIn(0.0, 4.0),
             horizontalPosition = (state.horizontalPosition + when (discrete) {
-                PoseAction.SCROLL_LEFT -> -1
-                PoseAction.SCROLL_RIGHT -> 1
-                else -> 0
-            }).coerceIn(0, 4),
+                PoseAction.SCROLL_LEFT -> -1.0
+                PoseAction.SCROLL_RIGHT -> 1.0
+                else -> horizontalVelocity * seconds / SAMPLE_PAGE_SIZE_PX
+            }).coerceIn(0.0, 4.0),
             videoPlaying = if (discrete == PoseAction.SINGLE_TAP) !state.videoPlaying else state.videoPlaying,
             doubleTaps = state.doubleTaps + if (discrete == PoseAction.DOUBLE_TAP) 1 else 0,
             actionCount = state.actionCount + if (discrete != PoseAction.NONE) 1 else 0,
@@ -168,7 +171,8 @@ internal class PracticeFeedback(private val settings: NativeSettings) {
                 custom?.pose == null -> "Pose not recognized"
                 selected == PoseAction.NONE -> "No action assigned to this pose"
                 else -> null
-            }, velocity = velocity, holdActivations = state.holdActivations + if (activated) 1 else 0,
+            }, velocity = if (horizontalVelocity != 0.0) horizontalVelocity else velocity,
+            holdActivations = state.holdActivations + if (activated) 1 else 0,
             localDetailOpen = state.localDetailOpen && discrete != PoseAction.BACK)
         lastHeld = held
         return state
@@ -189,6 +193,6 @@ internal class PracticeFeedback(private val settings: NativeSettings) {
         state = state.copy(pointer = pointer?.state)
     }
 
-    // shortcut: local cards use a fixed logical page height; calibrate external feed movement on real targets.
-    private companion object { const val SAMPLE_HEIGHT_PX = 600.0 }
+    // shortcut: local samples use a fixed logical page size; calibrate external feed movement on real targets.
+    private companion object { const val SAMPLE_PAGE_SIZE_PX = 600.0 }
 }

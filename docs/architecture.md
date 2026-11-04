@@ -102,24 +102,33 @@ Native pointing left/right also works with custom actions off. It uses the exist
 horizontal adapter and the same confirmation/timed rearm as vertical pointing,
 without direction inversion. The compatibility configuration keeps horizontal
 pointing disabled for unchanged historical Dart fixtures. The custom direction
-profile defaults left/right to the matching horizontal actions; saved bindings
+mapping defaults left/right to the matching horizontal actions; saved bindings
 remain authoritative.
 
 With custom actions enabled in Scroll POSE/HYBRID, the recognition snapshot
-selects one exclusive direction/finger profile and shared open, closed and thumbs-up
-poses. The resolver maps confirmed poses to discrete actions or a held direction;
+recognizes direction, finger-combination and common poses together. POINTING_UP is
+the sole identity for index-finger-up; INDEX_MIDDLE requires both fingers pointing
+up and defaults to continuous next. The resolver maps confirmed poses to discrete actions or a held direction;
 NONE does not claim HYBRID motion/flick ownership. Chosen custom scroll directions
 are final; reversal still applies to legacy and movement/flick paths. Binding
 snapshots are immutable, and preference decoding falls back per field. An unsupported
 future version disables custom use while preserving its raw keys on unrelated updates.
+Preference format 2 stores the pointing-autoscroll toggle. Format 1 up/index binding
+conflicts follow the previously selected profile, and an old NONE two-finger binding
+adopts continuous next. Retired profile/index keys remain preserved but are not runtime selectors.
 
-Custom horizontal actions are discrete and available to every existing pose.
+Custom horizontal actions support discrete and held scrolling.
 Scroll left/right navigates toward content on that side using the opposite finger
 swipe, with constant Y and the saved distance fraction applied to content width.
 Both endpoints move to a clear row when the floating controls intersect the path;
 dispatch is rejected if no candidate row is clear. These actions share the existing
 freshness, target, session and busy guards and ignore direction reversal. Practice
 updates only its independent bounded horizontal page sample.
+When pointing autoscroll is enabled, each pointing pose's selected one-shot scroll
+action resolves to its held equivalent. Pointing bindings remain editable and
+effective while enabled; taps, Back, NONE and explicit held actions remain unchanged.
+Turning it off restores one-shot scrolling. Practice integrates horizontal held movement using elapsed
+time without moving the vertical sample; it never constructs an external executor.
 
 The coordinator owns one operation and drops busy samples. Held pose scrolling
 uses 100ms segments and a provisional shared 300 px/s speed. A watchdog polled at

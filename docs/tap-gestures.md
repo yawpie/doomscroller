@@ -29,30 +29,39 @@ Dashboard's camera-free Single tap / Double tap buttons let you check target-app
 ## Custom pose actions
 
 In Scroll with POSE or HYBRID, enable custom pose actions in the Settings draft,
-choose one profile and Apply. The direction profile supports pointing up, down,
-left and right; the finger profile supports index only, middle only and index +
-middle as independent poses. Open hand, closed hand and thumbs-up are shared
-between profiles. Open hand requires five open fingers; the closed fist keeps the
+Apply. Pointing up/down/left/right, middle finger only, index + middle up and common
+poses are recognized together. Point up and index finger up share one identity and
+binding. Both index and middle must point up for their combined pose. Open hand
+requires five open fingers; the closed fist keeps the
 thumb near the curled fingers; thumbs-up extends the thumb. Ambiguous shapes do
-not select a nearest supported combination. The profiles do not fall back to each
-other. Custom mappings are saved but inactive in Pointer, FLICK and CONTINUOUS.
+not select a nearest supported combination. Custom mappings are saved but inactive
+in Pointer, FLICK and CONTINUOUS.
 
 | Pose | Default custom action |
 | --- | --- |
-| Point up / down | Previous / next item once |
+| Point up (index finger up) / down | Previous / next item once |
 | Point left / right | Scroll left / right once |
 | Open hand / closed hand | Single tap / none |
-| Index only / middle only / index + middle | None for each |
+| Middle finger only | None |
+| Index + middle up | Continuous next while held |
 | Thumbs-up | Double tap |
 
 Each binding can instead select NONE, next or previous once, single or double
-center tap, Back, scroll left/right once, or continuous next/previous while held. Discrete actions run once
+center tap, Back, scroll left/right once, or continuous next/previous/left/right while held. Discrete actions run once
 per appearance; continuous begins after confirmation and needs fresh held samples.
 NONE leaves HYBRID flick/movement available. Custom next/previous directions are
 final; reversal still applies to vertical legacy pointing and movement/flick. Existing
 saved custom bindings remain unchanged; reset or edit them to use new defaults. Reset pose
 actions resets only that draft group; Apply saves and pauses active tracking.
 Practice uses saved settings and simulates Back and other actions locally.
+
+Autoscroll while pointing defaults off. While on, the selected scroll action for a
+confirmed pointing pose runs continuously while held. Pointing actions remain
+editable; changes apply after Apply. Tap, Back, NONE and explicit held actions keep
+their behavior. Releasing the pose stops future segments. The two-finger and
+common-pose mappings remain independent. Turning it off restores selected one-shot
+scrolling. Old up/index bindings merge using the previously active profile; an old
+unassigned two-finger binding adopts continuous next without resetting other settings.
 
 Continuous pose uses one 100 ms swipe at a time with a provisional 300 px/s
 velocity. Busy samples are dropped, with no backlog. Invalid or stale pose, target

@@ -98,10 +98,11 @@ the physical camera, real-app and performance acceptance still outstanding.
 
 ## Custom pose review
 
-Keep profile ownership, immutable bindings and trigger policy in `:gesture`, and
+Keep canonical pose ownership, immutable bindings and trigger policy in `:gesture`, and
 use `PoseActionResolver` for Practice and the external Scroll coordinator. Exercise
-custom-off parity, three independent finger bindings, common poses, preference
-corruption/future versions, final direction and HYBRID NONE. Back and held segments
+custom-off parity, merged up/index identity, simultaneous finger/pointing recognition,
+two-finger-up continuous scrolling, the four-direction autoscroll toggle, preference
+migration/corruption/future versions, final direction and HYBRID NONE. Back and held segments
 share target generation, freshness and dispatch guards. Do not infer a successful
 navigation from Back ACCEPTED or a swipe callback. Preserve failures and distinguish
 unit tests, compiled APKs, emulator execution and physical acceptance in the

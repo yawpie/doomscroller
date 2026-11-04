@@ -2,6 +2,9 @@ package dev.autoscroll.nativeapp.settings
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.SharedPreferences
 import dev.autoscroll.nativeapp.gesture.*
 import org.junit.Assert.*
 import org.junit.Test
@@ -9,6 +12,41 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class SettingsStoreTest {
+    @Test fun legacyProfilesMergeBindingsAndVersionTwoPreservesExplicitChoices() {
+        val target = InstrumentationRegistry.getInstrumentation().targetContext
+        val context = object : ContextWrapper(target) {
+            override fun getSharedPreferences(name: String, mode: Int): SharedPreferences =
+                super.getSharedPreferences("qa_combined_$name", mode)
+        }
+        val preferences = context.getSharedPreferences("gesture_settings", Context.MODE_PRIVATE)
+        try {
+            for (profile in listOf("DIRECTION", "FINGER_COMBINATIONS")) {
+                preferences.edit().clear().putInt("poseActions.version", 1)
+                    .putBoolean("poseActions.enabled", true).putString("poseActions.profile", profile)
+                    .putString("poseActions.binding.POINTING_UP.action", "PREVIOUS_ITEM")
+                    .putString("poseActions.binding.INDEX_ONLY.action", "BACK")
+                    .putString("poseActions.binding.INDEX_MIDDLE.action", "NONE")
+                    .putString("poseActions.binding.MIDDLE_ONLY.action", "SINGLE_TAP").commit()
+                val store = SettingsStore(context)
+                val migrated = store.state.value.poseActions
+                val expectedUp = if (profile == "FINGER_COMBINATIONS") PoseAction.BACK else PoseAction.PREVIOUS_ITEM
+                assertEquals(expectedUp, migrated.bindings[PoseId.POINTING_UP])
+                assertEquals(PoseAction.CONTINUOUS_NEXT, migrated.bindings[PoseId.INDEX_MIDDLE])
+                assertEquals(PoseAction.SINGLE_TAP, migrated.bindings[PoseId.MIDDLE_ONLY])
+                assertFalse(migrated.autoscrollPointing)
+                store.update(store.state.value.copy(poseActions = migrated.copy(autoscrollPointing = true)
+                    .withBinding(PoseId.INDEX_MIDDLE, PoseAction.NONE)))
+                assertEquals(2, preferences.getInt("poseActions.version", 0))
+                val reloaded = SettingsStore(context).state.value.poseActions
+                assertTrue(reloaded.autoscrollPointing)
+                assertEquals(expectedUp, reloaded.bindings[PoseId.POINTING_UP])
+                assertEquals(PoseAction.NONE, reloaded.bindings[PoseId.INDEX_MIDDLE])
+                preferences.edit().putString("poseActions.binding.INDEX_ONLY.action", "DOUBLE_TAP").commit()
+                assertEquals(expectedUp, SettingsStore(context).state.value.poseActions.bindings[PoseId.POINTING_UP])
+            }
+        } finally { target.deleteSharedPreferences("qa_combined_gesture_settings") }
+    }
+
     @Test fun controlModePersistsAndMissingKeyLoadsScrollKeepingOldPreferences() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val preferences = context.getSharedPreferences("gesture_settings", android.content.Context.MODE_PRIVATE)
@@ -52,8 +90,8 @@ class SettingsStoreTest {
         val saved = preferences.all.filterKeys { it.startsWith("poseActions.") }
         val original = SettingsStore(context).state.value
         try {
-            val actions = PoseActions(true, PoseRecognitionProfile.FINGER_COMBINATIONS)
-                .withBinding(PoseId.INDEX_ONLY, PoseAction.BACK)
+            val actions = PoseActions(enabled = true, autoscrollPointing = true)
+                .withBinding(PoseId.POINTING_UP, PoseAction.BACK)
                 .withBinding(PoseId.MIDDLE_ONLY, PoseAction.NEXT_ITEM)
                 .withBinding(PoseId.INDEX_MIDDLE, PoseAction.CONTINUOUS_PREVIOUS)
                 .withBinding(PoseId.POINTING_LEFT, PoseAction.SCROLL_LEFT)
@@ -61,20 +99,20 @@ class SettingsStoreTest {
             val store = SettingsStore(context)
             store.update(original.copy(poseActions = actions))
             assertEquals(actions, SettingsStore(context).state.value.poseActions)
-            preferences.edit().putString("poseActions.binding.INDEX_ONLY.action", "invalid")
-                .putString("poseActions.profile", "invalid").commit()
+            preferences.edit().putString("poseActions.binding.POINTING_UP.action", "invalid")
+                .putString("poseActions.autoscrollPointing", "invalid").commit()
             val reloaded = SettingsStore(context).state.value
             assertEquals(original.mode, reloaded.mode)
             assertEquals(original.pose, reloaded.pose)
-            assertEquals(PoseAction.NONE, reloaded.poseActions.bindings[PoseId.INDEX_ONLY])
+            assertEquals(PoseAction.PREVIOUS_ITEM, reloaded.poseActions.bindings[PoseId.POINTING_UP])
             assertEquals(PoseAction.NEXT_ITEM, reloaded.poseActions.bindings[PoseId.MIDDLE_ONLY])
-            assertEquals(PoseRecognitionProfile.DIRECTION, reloaded.poseActions.profile)
+            assertFalse(reloaded.poseActions.autoscrollPointing)
             preferences.edit().putInt("poseActions.version", 99).commit()
             val future = SettingsStore(context)
             assertFalse(future.state.value.poseActions.enabled)
             future.update(future.state.value.copy(inverted = !future.state.value.inverted))
             assertEquals(99, preferences.getInt("poseActions.version", 0))
-            assertEquals("invalid", preferences.getString("poseActions.binding.INDEX_ONLY.action", null))
+            assertEquals("invalid", preferences.getString("poseActions.binding.POINTING_UP.action", null))
         } finally {
             SettingsStore(context).update(original)
             val editor = preferences.edit()

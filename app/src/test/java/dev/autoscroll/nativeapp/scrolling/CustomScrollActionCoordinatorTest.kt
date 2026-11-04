@@ -24,10 +24,33 @@ class CustomScrollActionCoordinatorTest {
     private fun settings(action: PoseAction) = NativeSettings(mode = GestureMode.POSE, inverted = true,
         poseActions = PoseActions(enabled = true).withBinding(PoseId.POINTING_UP, action))
 
-    private fun decision(time: Long, event: Boolean = false, held: Boolean = false) = GestureDecision(
+    private fun decision(time: Long, event: Boolean = false, held: Boolean = false, pose: PoseId = PoseId.POINTING_UP) = GestureDecision(
         HandMotion(HandAction.IDLE), suppressesContinuous = true,
-        customPose = CustomPoseResult(pose = PoseId.POINTING_UP, event = if (event) PoseId.POINTING_UP else null,
-            held = if (held) PoseId.POINTING_UP else null, timestampMs = time))
+        customPose = CustomPoseResult(pose = pose, event = if (event) pose else null,
+            held = if (held) pose else null, timestampMs = time))
+
+    @Test fun pointingAutoscrollDispatchesAllFourAxesWithFreshnessTargetAndPauseGuards() = runTest {
+        for ((pose, action) in listOf(PoseId.POINTING_UP to ScrollAction.BACKWARD,
+            PoseId.POINTING_DOWN to ScrollAction.FORWARD, PoseId.POINTING_LEFT to ScrollAction.LEFT,
+            PoseId.POINTING_RIGHT to ScrollAction.RIGHT)) {
+            val executor = Executor()
+            var now = 1000L
+            val coordinator = ScrollActionCoordinator(executor, this, { now })
+            coordinator.configure(inverted = true, settings = NativeSettings(mode = GestureMode.POSE,
+                poseActions = PoseActions(enabled = true, autoscrollPointing = true)))
+            coordinator.setSessionActive(true)
+            coordinator.process(decision(now, held = true, pose = pose), now, "target.app", 8)
+            runCurrent()
+            assertEquals(ScrollRequest(action, 30.0, 100, "target.app", 8), executor.requests.single())
+            now += 500
+            coordinator.process(decision(now - 400, held = true, pose = pose), now - 400)
+            runCurrent()
+            coordinator.process(decision(now, held = true, pose = pose), now)
+            coordinator.setSessionActive(false)
+            runCurrent()
+            assertEquals(1, executor.requests.size)
+        }
+    }
 
     @Test fun mappedBackAcceptedAndBusyIsConsumedWithoutRetry() = runTest {
         val executor = Executor().apply { pending = CompletableDeferred() }

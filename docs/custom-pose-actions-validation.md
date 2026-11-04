@@ -152,3 +152,80 @@ The initial failure is retained in ignored
 `artifacts/hand-diagnostics/pointing-fixture-before-fix.txt`; final evidence is
 `artifacts/hand-diagnostics/pointing-samsung-verified.txt`. Fixture results do not
 establish real-hand accuracy or external-app acceptance.
+
+## Combined poses and pointing autoscroll (4 November 2026)
+
+Pointing directions and finger combinations now share one recognition set.
+POINTING_UP is the single identity for point up/index finger up; the duplicate
+INDEX_ONLY runtime identity and profile selector are removed. INDEX_MIDDLE requires
+both fingers pointing up and defaults to continuous next. Middle-only and common
+poses retain independent bindings. Canonical geometry still uses the verified
+depth-aware finger/closed-thumb checks.
+
+Autoscroll while pointing defaults off. Enabling it temporarily maps the four
+pointing poses to held up/down/left/right actions; disabling it restores stored
+bindings. Other poses are unaffected. Horizontal holds reuse the guarded executor,
+100ms segments and provisional 300px/s speed. Practice integrates only the matching
+local axis using elapsed time. Existing loss, freshness, generation, busy, target,
+overlay, permission and explicit-resume guards remain in place.
+
+Preference format 2 stores the toggle. Version 1 up/index conflicts follow the
+previously active profile; an old NONE two-finger binding adopts continuous next.
+Other explicit bindings are preserved. Retired keys remain stored but inactive,
+and unsupported future formats remain preserved on unrelated updates. Tests cover
+both old profiles, version 2 explicit NONE, corruption and future-version handling.
+
+Validation: 192 JVM tests passed, zero failures/skips, including the unchanged
+historical parity replay. The full development gate passed: debug lint has 0 errors
+and 30 warnings; debug, unsigned release and instrumentation APKs built. Samsung
+SM-A165F / API 36 passed all 23 selected instrumentation cases with no skips:
+15 camera/model, 4 settings/migration and 4 pose UI tests. UI checks include the
+shared up binding, toggle off/on restoration, Apply/recreation, draft protection,
+and 200% text with light/dark component themes. The debug update is installed.
+
+The physical-device run changed only the expected migration keys (format version,
+two-finger default and the new toggle); unrelated preferences and permission grants
+matched before/after. The user confirmed the requested behavior through Practice.
+This is qualitative local-practice confirmation, not measured external-app or
+sustained-use acceptance.
+
+Raw device evidence: ignored `artifacts/combined-poses/samsung-instrumentation.txt`.
+Additional emulator landscape checks exposed scroll-locator timing in the test
+harness; the failing runs remain recorded separately from successful checks.
+After replacing page-sized forward scrolling with shorter swipes and retrying
+elements that moved out of view, all 4 pose UI tests passed on the API 36 emulator
+in landscape, with zero skips. The same assertions cover large text/light/dark,
+binding independence, draft recreation/Apply and the dirty-draft Practice guard.
+Final emulator evidence: ignored
+`artifacts/combined-poses/emulator-landscape-ui-short-scroll.txt`. Earlier locator
+failures are preserved in the other emulator logs. The temporary read-only emulator
+was closed after verification; personal-device rotation/font settings were not changed.
+
+## Editing pointing bindings with autoscroll enabled (4 November 2026)
+
+Pointing action buttons remain editable while Autoscroll while pointing is on.
+The toggle now converts each selected one-shot scroll binding to its held equivalent,
+instead of forcing a direction from the pose identity. Explicit held actions,
+NONE, taps and Back retain their configured behavior. Defaults still follow the
+four pointing directions. Turning autoscroll off restores one-shot scrolling for
+the selected one-shot bindings. No preference format or stored key changes are needed.
+
+The editor and picker descriptions display these effective semantics. UI regression
+cases edit pointing actions with the toggle on, retain the toggle, and verify
+draft recreation/Apply and large text in both themes. Native regressions cover
+remapped scroll directions, hold versus discrete triggers, NONE ownership and
+unchanged two-finger/common bindings. All 193 JVM tests passed without failures or
+skips; debug lint completed with 0 errors and 30 warnings, and debug, unsigned
+release and instrumentation APK builds passed. Historical parity fixtures are unchanged.
+
+The updated debug APK is installed on Samsung SM-A165F / API 36. All 4 pose UI
+tests passed with no skips, including edits made with autoscroll on and their
+retention through recreation/Apply. The first UI run passed its assertions but
+post-run comparison found the reversal preference changed. Its original value was
+restored and the UI test class now snapshots fresh saved settings before each test
+and restores them afterward. The final rerun passed with all saved preference
+values and permission grants unchanged. Initial and final UI logs are preserved in
+ignored `artifacts/pointing-edit-autoscroll/samsung-ui.txt` and
+`artifacts/pointing-edit-autoscroll/samsung-ui-verified.txt`.
+Emulator execution and observed gestures in external apps were not repeated for
+this correction; the earlier combined-pose receipt does not establish those results.

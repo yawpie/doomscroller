@@ -6,7 +6,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CustomPracticeFeedbackTest {
-    private fun sample(time: Long, open: Set<Int>): HandTrackingResult {
+    private fun sample(time: Long, open: Set<Int>, rotation: Double = 0.0): HandTrackingResult {
         val points = MutableList(21) { 0.0 to 0.0 }
         points[0] = 0.0 to 0.12; points[1] = -0.11 to 0.09; points[2] = -0.11 to 0.03
         points[3] = -0.04 to 0.03; points[4] = 0.02 to 0.03
@@ -17,14 +17,15 @@ class CustomPracticeFeedbackTest {
             points[mcp + 3] = if (mcp in open) x to y - 0.22 else x + 0.05 to y - 0.035
         }
         return HandTrackingResult(time, HandPose(points.mapIndexed { index, (x, y) ->
-            HandLandmark(index, 0.5 + x, 0.5 + y, 0.0)
+            HandLandmark(index, 0.5 + x * kotlin.math.cos(rotation) - y * kotlin.math.sin(rotation),
+                0.5 + x * kotlin.math.sin(rotation) + y * kotlin.math.cos(rotation), 0.0)
         }))
     }
 
     private fun feedback(index: PoseAction, middle: PoseAction = PoseAction.NONE,
         both: PoseAction = PoseAction.NONE, inverted: Boolean = false): PracticeFeedback {
-        val actions = PoseActions(enabled = true, profile = PoseRecognitionProfile.FINGER_COMBINATIONS)
-            .withBinding(PoseId.INDEX_ONLY, index).withBinding(PoseId.MIDDLE_ONLY, middle)
+        val actions = PoseActions(enabled = true)
+            .withBinding(PoseId.POINTING_UP, index).withBinding(PoseId.MIDDLE_ONLY, middle)
             .withBinding(PoseId.INDEX_MIDDLE, both)
         return PracticeFeedback(NativeSettings(mode = GestureMode.POSE, poseActions = actions, inverted = inverted))
     }
@@ -82,7 +83,7 @@ class CustomPracticeFeedbackTest {
         for ((binding, direction) in listOf(PoseAction.SCROLL_LEFT to -1, PoseAction.SCROLL_RIGHT to 1)) {
             val f = feedback(binding, inverted = true)
             for (t in 0L..800L step 100) f.process(sample(t, setOf(5)))
-            assertEquals(2 + direction, f.state.horizontalPosition)
+            assertEquals(2.0 + direction, f.state.horizontalPosition, 0.0)
             assertEquals(1, f.state.actionCount)
             assertEquals(2.0, f.state.position, 0.0)
             assertEquals(if (direction < 0) "Scroll left" else "Scroll right", f.state.lastAction)
@@ -91,7 +92,7 @@ class CustomPracticeFeedbackTest {
                 for (t in start..start + 200 step 100) f.process(sample(t, emptySet()))
                 for (t in start + 300..start + 800 step 100) f.process(sample(t, setOf(5)))
             }
-            assertEquals(if (direction < 0) 0 else 4, f.state.horizontalPosition)
+            assertEquals(if (direction < 0) 0.0 else 4.0, f.state.horizontalPosition, 0.0)
             assertEquals(5, f.state.actionCount)
             assertTrue(f.state.videoPlaying)
             assertEquals(0, f.state.doubleTaps)
@@ -121,5 +122,40 @@ class CustomPracticeFeedbackTest {
         discrete.process(sample(400, setOf(5)))
         for (t in 500L..1000L step 100) discrete.process(sample(t, setOf(5)))
         assertEquals(1, discrete.state.actionCount)
+    }
+
+    @Test fun pointingAutoscrollMovesOnlyTheChosenAxisAndStopsOnHandLoss() {
+        for ((rotation, direction) in listOf(0.0 to -1, kotlin.math.PI to 1,
+            -kotlin.math.PI / 2 to -1, kotlin.math.PI / 2 to 1)) {
+            val horizontal = kotlin.math.abs(rotation) == kotlin.math.PI / 2
+            val f = PracticeFeedback(NativeSettings(mode = GestureMode.POSE, inverted = true,
+                poseActions = PoseActions(enabled = true, autoscrollPointing = true)))
+            for (t in 0L..1000L step 100) f.process(sample(t, setOf(5), rotation))
+            assertEquals(2.0 + if (horizontal) 0.0 else direction * 0.4, f.state.position, 0.000001)
+            assertEquals(2.0 + if (horizontal) direction * 0.4 else 0.0, f.state.horizontalPosition, 0.000001)
+            assertEquals(1, f.state.holdActivations)
+            assertEquals(0, f.state.actionCount)
+            val before = f.state
+            f.process(HandTrackingResult(1100))
+            assertEquals(before.position, f.state.position, 0.0)
+            assertEquals(before.horizontalPosition, f.state.horizontalPosition, 0.0)
+            assertEquals(0.0, f.state.velocity, 0.0)
+        }
+    }
+
+    @Test fun twoFingersScrollContinuouslyWhileSinglePointKeepsItsSavedAction() {
+        val settings = NativeSettings(mode = GestureMode.POSE, poseActions = PoseActions(enabled = true))
+        val two = PracticeFeedback(settings)
+        val single = PracticeFeedback(settings)
+        for (t in 0L..800L step 100) {
+            two.process(sample(t, setOf(5, 9)))
+            single.process(sample(t, setOf(5)))
+        }
+        assertTrue(two.state.position > 2.0)
+        assertEquals(1, two.state.holdActivations)
+        assertEquals(0, two.state.actionCount)
+        assertEquals(1.0, single.state.position, 0.0)
+        assertEquals(1, single.state.actionCount)
+        assertEquals(0, single.state.holdActivations)
     }
 }

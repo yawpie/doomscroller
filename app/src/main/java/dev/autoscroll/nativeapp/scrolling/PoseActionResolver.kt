@@ -8,8 +8,8 @@ import dev.autoscroll.nativeapp.settings.NativeSettings
 object PoseActionResolver {
     // shortcut: provisional 300 px/s; calibrate touch slop and comfort on physical targets before acceptance.
     fun holdVelocity(action: PoseAction): Double = when (action) {
-        PoseAction.CONTINUOUS_NEXT -> 300.0
-        PoseAction.CONTINUOUS_PREVIOUS -> -300.0
+        PoseAction.CONTINUOUS_NEXT, PoseAction.CONTINUOUS_RIGHT -> 300.0
+        PoseAction.CONTINUOUS_PREVIOUS, PoseAction.CONTINUOUS_LEFT -> -300.0
         else -> 0.0
     }
 

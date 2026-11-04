@@ -16,7 +16,6 @@ import dev.autoscroll.nativeapp.gesture.HandLandmark
 import dev.autoscroll.nativeapp.gesture.HandPose
 import dev.autoscroll.nativeapp.gesture.CustomPoseClassifier
 import dev.autoscroll.nativeapp.gesture.PoseId
-import dev.autoscroll.nativeapp.gesture.PoseRecognitionProfile
 import java.nio.ByteBuffer
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -181,16 +180,14 @@ class CameraPipelineTest {
             checkNotNull(BitmapFactory.decodeStream(it)) { "Cannot decode shared hand fixture" }
         }
 
-    @Test fun officialThumbFixtureIsRecognizedByBothCustomProfiles() {
+    @Test fun officialThumbFixtureIsRecognizedWithCombinedPoses() {
         val bitmap = instrumentationFixture()
         val aspect = bitmap.width.toDouble() / bitmap.height
         val engine = HandLandmarkerEngine(InstrumentationRegistry.getInstrumentation().targetContext, TrackingConfig())
         try {
             val pose = checkNotNull(engine.detect(bitmap, 1)) { "Official hand fixture was not detected" }
             val classifier = CustomPoseClassifier()
-            for (profile in PoseRecognitionProfile.entries) {
-                assertEquals(PoseId.THUMBS_UP, classifier.classify(pose.landmarks, aspect, profile))
-            }
+            assertEquals(PoseId.THUMBS_UP, classifier.classify(pose.landmarks, aspect))
         } finally {
             engine.close()
             if (!bitmap.isRecycled) bitmap.recycle()
@@ -212,7 +209,7 @@ class CameraPipelineTest {
                 try {
                     val pose = checkNotNull(engine.detect(bitmap, 1)) { "Pointing fixture was not detected at $rotation" }
                     assertEquals("Pointing fixture at $rotation", expected,
-                        CustomPoseClassifier().classify(pose.landmarks, aspect, PoseRecognitionProfile.DIRECTION))
+                        CustomPoseClassifier().classify(pose.landmarks, aspect))
                 } finally {
                     engine.close()
                     if (!bitmap.isRecycled) bitmap.recycle()

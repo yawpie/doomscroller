@@ -13,14 +13,18 @@ class SettingsStore(context: Context) {
     private fun readPoseActions(): PoseActions {
         val values = preferences.all
         val version = values["poseActions.version"]
-        if (version != null && version != 1) return PoseActions()
+        if (version != null && version != 1 && version != 2) return PoseActions()
         val defaults = PoseActions()
-        val profile = PoseRecognitionProfile.entries.firstOrNull { it.id == values["poseActions.profile"] } ?: defaults.profile
+        val legacy = version != 2
         val bindings = PoseId.entries.associateWith { pose ->
-            PoseAction.entries.firstOrNull { it.id == values["poseActions.binding.${pose.id}.action"] }
-                ?: defaults.bindings.getValue(pose)
+            val key = if (legacy && pose == PoseId.POINTING_UP && values["poseActions.profile"] == "FINGER_COMBINATIONS" &&
+                values.containsKey("poseActions.binding.INDEX_ONLY.action")) "INDEX_ONLY" else pose.id
+            val saved = PoseAction.entries.firstOrNull { it.id == values["poseActions.binding.$key.action"] }
+            if (legacy && pose == PoseId.INDEX_MIDDLE && saved == PoseAction.NONE) PoseAction.CONTINUOUS_NEXT
+            else saved ?: defaults.bindings.getValue(pose)
         }
-        return PoseActions(values["poseActions.enabled"] as? Boolean ?: false, profile, bindings)
+        return PoseActions(values["poseActions.enabled"] as? Boolean ?: false, bindings,
+            values["poseActions.autoscrollPointing"] as? Boolean ?: false)
     }
     private val mutable = MutableStateFlow(runCatching {
         NativeSettings(
@@ -75,9 +79,9 @@ class SettingsStore(context: Context) {
         mutable.value = settings
         preferences.edit().apply {
             if (poseActionsChanged) {
-                putInt("poseActions.version", 1)
+                putInt("poseActions.version", 2)
                 putBoolean("poseActions.enabled", settings.poseActions.enabled)
-                putString("poseActions.profile", settings.poseActions.profile.id)
+                putBoolean("poseActions.autoscrollPointing", settings.poseActions.autoscrollPointing)
                 settings.poseActions.bindings.forEach { (pose, action) ->
                     putString("poseActions.binding.${pose.id}.action", action.id)
                 }

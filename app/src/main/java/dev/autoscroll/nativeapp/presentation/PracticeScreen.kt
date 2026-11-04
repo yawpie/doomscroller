@@ -109,8 +109,8 @@ internal fun PracticeScreen(state: PracticeState, settings: NativeSettings, came
                         settings.mode == GestureMode.POSE || settings.mode == GestureMode.HYBRID)
                     Text("Try a gesture", style = MaterialTheme.typography.titleMedium)
                     if (settings.poseActions.enabled && (settings.mode == GestureMode.POSE || settings.mode == GestureMode.HYBRID)) {
-                        Text("Custom pose actions use your saved settings. One-shot actions run once per appearance; continuous actions move while the confirmed pose stays visible.")
-                        Text("The index + middle pose has its own action. A single-finger pose held long enough before changing is also a valid gesture.")
+                        Text("Pointing directions and finger combinations work together. Point up and index finger up are one pose. One-shot actions run once per appearance; continuous actions stop when the pose is released.")
+                        Text("Raise index and middle together for their own action, continuous next by default. Autoscroll while pointing is ${if (settings.poseActions.autoscrollPointing) "on: chosen pointing scroll actions run while held" else "off: saved pointing actions apply"}.")
                         if (settings.mode == GestureMode.HYBRID) Text("A pose with no action does not block flick or movement controls.")
                     } else if (settings.mode == GestureMode.POSE || settings.mode == GestureMode.HYBRID) {
                         Text("Point down for ${if (settings.inverted) "previous" else "next"}; point up for ${if (settings.inverted) "next" else "previous"}. Holding a pointing pose or thumbs-up can repeat after the saved rearm delay plus fresh confirmation.")
@@ -232,11 +232,11 @@ private fun PracticeLiveFeedback(state: PracticeState, settings: NativeSettings,
 private fun SampleFeed(sample: PracticeSample, openDetail: () -> Unit, canOpenDetail: Boolean, showBackSample: Boolean,
     showHorizontalSample: Boolean) {
     if (showHorizontalSample) {
-    Text("Horizontal sample · page ${sample.horizontalPosition + 1} of 5", style = MaterialTheme.typography.titleMedium)
+    Text("Horizontal sample · page ${sample.horizontalPosition.roundToInt() + 1} of 5", style = MaterialTheme.typography.titleMedium)
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         repeat(5) { index ->
             Surface(Modifier.weight(1f).heightIn(min = 48.dp),
-                color = if (index == sample.horizontalPosition) MaterialTheme.colorScheme.primaryContainer
+                color = if (index == sample.horizontalPosition.roundToInt()) MaterialTheme.colorScheme.primaryContainer
                     else MaterialTheme.colorScheme.surfaceVariant) {
                 Box(contentAlignment = Alignment.Center) { Text("${index + 1}") }
             }

@@ -44,14 +44,16 @@ At least a limited-performance device and a newer device should be tested when a
 ## Custom pose actions acceptance
 
 These are proposed trials, not measured results. Enable custom actions, Apply,
-then explicitly Start; run direction and finger profiles separately. Confirm the
-three independent finger bindings and the shared open/fist/thumbs-up poses, and
+then explicitly Start; use pointing, finger combinations and common poses together.
+Confirm one shared up/index binding, the independent middle-finger binding,
+two-finger-up continuous action and open/fist/thumbs-up poses, and
 verify NONE leaves HYBRID flick/movement available. Observe real target changes;
 Back ACCEPTED and swipe completion alone do not prove navigation.
 
 | Trial | Evidence to collect |
 | --- | --- |
-| Pose accuracy | 20 appearances per canonical pose, per hand and profile; record confusion matrix, false triggers, lighting, distance and latency. Proposed target: at least 18/20 correct. |
+| Pose accuracy | 20 appearances per canonical pose and hand; record confusion matrix, false triggers, lighting, distance and latency. Proposed target: at least 18/20 correct. |
+| Pointing autoscroll | Toggle off/on; edit a pointing action while enabled and verify the chosen axis, no inversion, hand-release/loss stop and restored one-shot scrolling after switching off. Test Tap, Back and NONE overrides and two-finger-up continuous scrolling independently. |
 | Transitions | 20 changes per confusable pair, including each single finger ↔ both; test confirmation and that held output stops before a new pose triggers. |
 | Hold/release | Hold discrete and continuous poses for 10 seconds, test loss/reacquisition, and measure last submission and remaining 100ms segment after release. Confirm discrete Back fires at most once per appearance. |
 | Safety/lifecycle | Test target switches including A→B→A, lock, overlay interaction, stale callbacks, Pause/Stop and permissions; no new action after invalidation and no backlog. |

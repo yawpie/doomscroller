@@ -313,14 +313,14 @@ private fun GestureCard(title: String, drawing: HandDrawing, instruction: String
     }
 }
 
-private enum class HandDrawing { UP, DOWN, LEFT, RIGHT, INDEX_ONLY, MIDDLE_ONLY, INDEX_MIDDLE, OPEN, CLOSED, THUMB, FLICK, MOVEMENT }
+private enum class HandDrawing { UP, DOWN, LEFT, RIGHT, MIDDLE_ONLY, INDEX_MIDDLE, OPEN, CLOSED, THUMB, FLICK, MOVEMENT }
 
 @Composable
 internal fun PoseIllustration(pose: PoseId) {
     HandIllustration(when (pose) {
         PoseId.POINTING_UP -> HandDrawing.UP; PoseId.POINTING_DOWN -> HandDrawing.DOWN
         PoseId.POINTING_LEFT -> HandDrawing.LEFT; PoseId.POINTING_RIGHT -> HandDrawing.RIGHT
-        PoseId.INDEX_ONLY -> HandDrawing.INDEX_ONLY; PoseId.MIDDLE_ONLY -> HandDrawing.MIDDLE_ONLY
+        PoseId.MIDDLE_ONLY -> HandDrawing.MIDDLE_ONLY
         PoseId.INDEX_MIDDLE -> HandDrawing.INDEX_MIDDLE; PoseId.OPEN_HAND -> HandDrawing.OPEN
         PoseId.CLOSED_HAND -> HandDrawing.CLOSED; PoseId.THUMBS_UP -> HandDrawing.THUMB
     })
@@ -336,7 +336,6 @@ private fun HandIllustration(drawing: HandDrawing) {
             HandDrawing.DOWN -> "Hand illustration: index finger pointing down, other fingers curled"
             HandDrawing.LEFT -> "Hand illustration: index finger pointing left, other fingers and thumb curled"
             HandDrawing.RIGHT -> "Hand illustration: index finger pointing right, other fingers and thumb curled"
-            HandDrawing.INDEX_ONLY -> "Hand illustration: index finger extended, other fingers and thumb curled"
             HandDrawing.MIDDLE_ONLY -> "Hand illustration: middle finger extended, other fingers and thumb curled"
             HandDrawing.INDEX_MIDDLE -> "Hand illustration: index and middle fingers extended, other fingers and thumb curled"
             HandDrawing.CLOSED -> "Hand illustration: four fingers curled, thumb close to fist"
@@ -362,10 +361,9 @@ private fun HandIllustration(drawing: HandDrawing) {
                         for (i in 1..3) finger(left + i * 15f, top - 8f, 13f, 26f)
                         finger(left - 10f, top + 14f, 22f, 15f)
                     }
-                    HandDrawing.INDEX_ONLY, HandDrawing.MIDDLE_ONLY, HandDrawing.INDEX_MIDDLE -> {
+                    HandDrawing.MIDDLE_ONLY, HandDrawing.INDEX_MIDDLE -> {
                         for (i in 0..3) {
-                            val extended = (i == 0 && drawing != HandDrawing.MIDDLE_ONLY) ||
-                                (i == 1 && drawing != HandDrawing.INDEX_ONLY)
+                            val extended = i == 1 || (i == 0 && drawing == HandDrawing.INDEX_MIDDLE)
                             finger(left + i * 15f, top - if (extended) 54f else 8f, 13f, if (extended) 65f else 26f)
                         }
                         finger(left - 10f, top + 14f, 22f, 15f)
@@ -404,7 +402,7 @@ private fun HandIllustration(drawing: HandDrawing) {
 private fun compactGuide(settings: NativeSettings) = if (settings.controlMode == ControlMode.POINTER)
     "Point to aim. Pinch to press, keep pinched to hold, move while pinched to drag, separate to release. Calibrate in Practice before each new external session."
     else if (settings.poseActions.enabled && (settings.mode == GestureMode.POSE || settings.mode == GestureMode.HYBRID))
-    "Custom pose actions follow your saved profile. Open Gestures for the pose and action list."
+    "Pointing directions and finger combinations work together. Open Gestures for saved actions and autoscroll status."
     else when (settings.mode) {
     GestureMode.POSE -> "Point down/up to navigate; point left/right to scroll horizontally. Open hand: tap video once. Thumbs-up: double tap. Pointing and thumbs-up can repeat."
     GestureMode.HYBRID -> "Point down/up or flick to navigate; point left/right to scroll horizontally; move your palm to scroll. Open hand: tap video once. Thumbs-up: double tap."

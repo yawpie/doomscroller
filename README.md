@@ -47,26 +47,37 @@ With custom pose actions off (the default), HYBRID/POSE support pointing up/down
 for vertical navigation and pointing left/right for horizontal scrolling, plus
 open-hand tap and thumbs-up. Held pointing poses repeat after the saved rearm
 delay and fresh confirmation. CONTINUOUS/FLICK retain movement controls. To configure poses, enable
-Settings → Hand pose actions, choose Pointing directions or Finger combinations,
-then choose an action for each pose. Direction and finger profiles are exclusive;
-open hand, closed hand and thumbs-up are shared. The three finger combinations
-(index only, middle only, index and middle together) have independent bindings.
+Settings → Hand pose actions and choose an action for each pose. Pointing directions,
+finger combinations and common poses work together. Point up and index finger up
+are one pose with one binding. Middle finger only remains independent; raising index
+and middle together defaults to continuous next scrolling while held. Both fingers
+must point up, with the other fingers and thumb folded.
 Custom actions include one swipe, center tap, double tap, Android Back and scrolling
 while a pose is held. NONE sends no pose action; HYBRID may still use flick/movement.
 Custom mappings work in Scroll with POSE/HYBRID, not Pointer, FLICK or CONTINUOUS.
-The default custom Pointing directions profile maps Point left/right to
-**Scroll left once** / **Scroll right once**. Existing saved bindings stay unchanged;
-edit these poses or reset pose actions and Apply to use the new defaults. Any pose
-can use either horizontal action. Custom actions send one swipe per confirmed
-appearance; release the pose before repeating.
+With **Autoscroll while pointing** off (default), Point left/right defaults to
+**Scroll left once** / **Scroll right once**. Turn the toggle on and Apply to scroll
+continuously using each pointing pose's chosen scroll action while held;
+release or lose the hand to stop new segments. Pointing actions remain editable
+with the toggle on, and edits apply after Apply. Tap, Back and No action retain
+their behavior. Turning the toggle off restores the selected one-shot scroll actions. Two-finger and
+common-pose bindings remain independent. Discrete custom actions send one swipe
+per confirmed appearance; release the pose before repeating.
 Left/right describes content navigation: left swipes the finger right, and right
 swipes the finger left. Distance uses the saved screen-distance fraction of the
-content width, and duration uses the saved swipe duration. Practice shows a separate
+content width, and duration uses the saved swipe duration for discrete actions.
+Held actions use bounded 100ms segments at the existing provisional 300px/s.
+Practice shows a separate
 five-page horizontal sample; external apps decide whether the swipe scrolls or
 performs another action.
 Reverse direction affects vertical legacy pointing and movement/flick; horizontal
 left/right and selected custom pose directions stay fixed. Gestures describes saved settings; apply or discard an unsaved
 draft before entering Practice. Reset pose actions changes only that draft group.
+
+Old direction/finger settings migrate without clearing preferences: the previously
+active up/index binding becomes the shared up binding. An old unassigned two-finger
+binding adopts continuous next; other explicit bindings remain saved. The autoscroll
+toggle starts off. Unsupported future preference formats remain preserved and inactive.
 
 Gestures → Practice safely uses saved recognition settings with a local sample
 feed and live feedback. A mirrored camera preview and live feedback stay pinned

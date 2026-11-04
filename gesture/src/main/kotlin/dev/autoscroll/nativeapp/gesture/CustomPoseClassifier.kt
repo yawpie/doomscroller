@@ -8,8 +8,7 @@ import kotlin.math.PI
 class CustomPoseClassifier(private val config: HandPoseDetectionConfig = HandPoseDetectionConfig()) {
     private enum class Finger { OPEN, CLOSED, UNKNOWN }
 
-    fun classify(points: List<HandLandmark>, aspect: Double, profile: PoseRecognitionProfile,
-        active: PoseId? = null): PoseId? {
+    fun classify(points: List<HandLandmark>, aspect: Double, active: PoseId? = null): PoseId? {
         if (!validLandmarks(points) || !aspect.isFinite() || aspect <= 0 ||
             points.any { it.x <= 0 || it.x >= 1 || it.y <= 0 || it.y >= 1 }) return null
         fun distance(a: Int, b: Int) = hypot((points[a].x - points[b].x) * aspect, points[a].y - points[b].y)
@@ -62,12 +61,17 @@ class CustomPoseClassifier(private val config: HandPoseDetectionConfig = HandPos
             if (allClosed && thumb == Finger.CLOSED) return PoseId.CLOSED_HAND
             if (fingers.all { it == Finger.OPEN } && thumb == Finger.OPEN) return PoseId.OPEN_HAND
             if (thumb != Finger.CLOSED || fingers[2] != Finger.CLOSED || fingers[3] != Finger.CLOSED) return null
-            if (profile == PoseRecognitionProfile.FINGER_COMBINATIONS) return when {
-                fingers[0] == Finger.OPEN && fingers[1] == Finger.OPEN -> PoseId.INDEX_MIDDLE
-                fingers[0] == Finger.OPEN && fingers[1] == Finger.CLOSED -> PoseId.INDEX_ONLY
-                fingers[0] == Finger.CLOSED && fingers[1] == Finger.OPEN -> PoseId.MIDDLE_ONLY
-                else -> null
+            if (fingers[0] == Finger.OPEN && fingers[1] == Finger.OPEN) {
+                val threshold = if (exit) config.exitVerticalAlignment else config.minimumVerticalAlignment
+                val bothUp = listOf(5, 9).all { mcp ->
+                    val dx = (points[mcp + 3].x - points[mcp].x) * aspect
+                    val dy = points[mcp + 3].y - points[mcp].y
+                    val length = hypot(dx, dy)
+                    length > 1e-9 && -dy / length >= threshold
+                }
+                return if (bothUp) PoseId.INDEX_MIDDLE else null
             }
+            if (fingers[0] == Finger.CLOSED && fingers[1] == Finger.OPEN) return PoseId.MIDDLE_ONLY
             if (fingers[0] != Finger.OPEN || fingers[1] != Finger.CLOSED) return null
             val dx = (points[8].x - points[5].x) * aspect
             val dy = points[8].y - points[5].y

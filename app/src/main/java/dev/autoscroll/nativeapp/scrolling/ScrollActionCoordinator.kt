@@ -79,7 +79,7 @@ class ScrollActionCoordinator(
                 poseHolding = true
                 velocity = heldVelocity
                 mutableState.value = state.value.copy(continuousPixelsPerSecond = velocity)
-                return dispatch(ScrollRequest(if (velocity > 0) ScrollAction.FORWARD else ScrollAction.BACKWARD,
+                return dispatch(ScrollRequest(checkNotNull(screenAction(held!!)),
                     abs(velocity) * CONTINUOUS_DURATION_MS / 1000.0, CONTINUOUS_DURATION_MS,
                     expectedTargetPackage, expectedTargetGeneration), nowMs, holdGeneration = holdGeneration)
             }
@@ -132,10 +132,10 @@ class ScrollActionCoordinator(
     }
 
     private fun screenAction(action: PoseAction): ScrollAction? = when (action) {
-        PoseAction.NEXT_ITEM -> ScrollAction.FORWARD
-        PoseAction.PREVIOUS_ITEM -> ScrollAction.BACKWARD
-        PoseAction.SCROLL_LEFT -> ScrollAction.LEFT
-        PoseAction.SCROLL_RIGHT -> ScrollAction.RIGHT
+        PoseAction.NEXT_ITEM, PoseAction.CONTINUOUS_NEXT -> ScrollAction.FORWARD
+        PoseAction.PREVIOUS_ITEM, PoseAction.CONTINUOUS_PREVIOUS -> ScrollAction.BACKWARD
+        PoseAction.SCROLL_LEFT, PoseAction.CONTINUOUS_LEFT -> ScrollAction.LEFT
+        PoseAction.SCROLL_RIGHT, PoseAction.CONTINUOUS_RIGHT -> ScrollAction.RIGHT
         PoseAction.SINGLE_TAP -> ScrollAction.SINGLE_TAP
         PoseAction.DOUBLE_TAP -> ScrollAction.DOUBLE_TAP
         PoseAction.BACK -> ScrollAction.BACK

@@ -6,6 +6,29 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PoseActionResolverTest {
+    @Test fun pointingAutoscrollConvertsEditedScrollBindingsAndKeepsOtherActions() {
+        val saved = PoseActions(enabled = true).withBinding(PoseId.POINTING_UP, PoseAction.NEXT_ITEM)
+            .withBinding(PoseId.POINTING_DOWN, PoseAction.PREVIOUS_ITEM)
+            .withBinding(PoseId.POINTING_LEFT, PoseAction.SCROLL_RIGHT)
+            .withBinding(PoseId.POINTING_RIGHT, PoseAction.SCROLL_LEFT)
+            .withBinding(PoseId.MIDDLE_ONLY, PoseAction.SINGLE_TAP)
+        assertEquals(PoseAction.CONTINUOUS_NEXT, saved.actionFor(PoseId.INDEX_MIDDLE))
+        val auto = saved.copy(autoscrollPointing = true)
+        for ((pose, action) in listOf(PoseId.POINTING_UP to PoseAction.CONTINUOUS_NEXT,
+            PoseId.POINTING_DOWN to PoseAction.CONTINUOUS_PREVIOUS, PoseId.POINTING_LEFT to PoseAction.CONTINUOUS_RIGHT,
+            PoseId.POINTING_RIGHT to PoseAction.CONTINUOUS_LEFT)) {
+            for (inverted in listOf(false, true)) assertEquals(action,
+                PoseActionResolver.custom(pose, NativeSettings(mode = GestureMode.POSE, inverted = inverted, poseActions = auto)))
+            assertEquals(PoseTrigger.HELD, action.trigger)
+        }
+        assertEquals(PoseAction.SINGLE_TAP, auto.actionFor(PoseId.MIDDLE_ONLY))
+        assertEquals(PoseAction.CONTINUOUS_NEXT, auto.actionFor(PoseId.INDEX_MIDDLE))
+        assertEquals(saved, auto.copy(autoscrollPointing = false))
+        assertEquals(PoseAction.NEXT_ITEM, auto.copy(autoscrollPointing = false).actionFor(PoseId.POINTING_UP))
+        for (action in listOf(PoseAction.NONE, PoseAction.BACK, PoseAction.SINGLE_TAP, PoseAction.DOUBLE_TAP, PoseAction.CONTINUOUS_LEFT))
+            assertEquals(action, auto.withBinding(PoseId.POINTING_UP, action).actionFor(PoseId.POINTING_UP))
+    }
+
     @Test fun horizontalPointingDefaultsMatchLegacyAndRespectExplicitCustomBindings() {
         for (inverted in listOf(false, true)) {
             val settings = NativeSettings(mode = GestureMode.POSE, inverted = inverted, poseActions = PoseActions(enabled = true))
@@ -23,7 +46,7 @@ class PoseActionResolverTest {
     @Test fun everyBindingAcceptsEveryActionIndependentlyAndAllNoneIsValid() {
         val empty = PoseActions(enabled = true, bindings = PoseId.entries.associateWith { PoseAction.NONE })
         for (pose in PoseId.entries) for (action in PoseAction.entries) {
-            val changed = empty.copy(profile = pose.profile ?: PoseRecognitionProfile.DIRECTION).withBinding(pose, action)
+            val changed = empty.withBinding(pose, action)
             val settings = NativeSettings(mode = GestureMode.POSE, poseActions = changed)
             assertEquals(action, PoseActionResolver.custom(pose, settings))
             assertTrue(changed.bindings.filterKeys { it != pose }.values.all { it == PoseAction.NONE })
@@ -35,20 +58,18 @@ class PoseActionResolverTest {
         assertEquals(0.0, PoseActionResolver.holdVelocity(PoseAction.BACK), 0.0)
     }
 
-    @Test fun profilesBindingsAndSnapshotsAreIndependent() {
+    @Test fun bindingsAndSnapshotsAreIndependent() {
         val mutable = PoseActions.defaultBindings().toMutableMap()
-        val original = PoseActions(true, PoseRecognitionProfile.FINGER_COMBINATIONS, mutable)
-        mutable[PoseId.INDEX_ONLY] = PoseAction.BACK
-        assertEquals(PoseAction.NONE, original.actionFor(PoseId.INDEX_ONLY))
-        val changed = original.withBinding(PoseId.INDEX_ONLY, PoseAction.BACK)
+        val original = PoseActions(true, mutable)
+        mutable[PoseId.POINTING_UP] = PoseAction.BACK
+        assertEquals(PoseAction.PREVIOUS_ITEM, original.actionFor(PoseId.POINTING_UP))
+        val changed = original.withBinding(PoseId.POINTING_UP, PoseAction.BACK)
             .withBinding(PoseId.MIDDLE_ONLY, PoseAction.NEXT_ITEM)
             .withBinding(PoseId.INDEX_MIDDLE, PoseAction.CONTINUOUS_PREVIOUS)
-        assertEquals(PoseAction.BACK, changed.actionFor(PoseId.INDEX_ONLY))
+        assertEquals(PoseAction.BACK, changed.actionFor(PoseId.POINTING_UP))
         assertEquals(PoseAction.NEXT_ITEM, changed.actionFor(PoseId.MIDDLE_ONLY))
         assertEquals(PoseAction.CONTINUOUS_PREVIOUS, changed.actionFor(PoseId.INDEX_MIDDLE))
-        assertEquals(PoseAction.NONE, changed.actionFor(PoseId.POINTING_UP))
         assertEquals(PoseAction.SINGLE_TAP, changed.actionFor(PoseId.OPEN_HAND))
-        assertEquals(PoseAction.SINGLE_TAP, changed.copy(profile = PoseRecognitionProfile.DIRECTION).actionFor(PoseId.OPEN_HAND))
         assertEquals(PoseTrigger.HELD, PoseAction.CONTINUOUS_PREVIOUS.trigger)
         assertEquals(PoseTrigger.INACTIVE, PoseAction.NONE.trigger)
     }
