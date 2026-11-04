@@ -58,10 +58,19 @@ class CustomPoseDetector(private val actions: PoseActions, private val config: H
             if (targetFence != pose) targetFence = null
         }
         val trigger = actions.actionFor(pose).trigger
+        val timedPointing = pose.isPointing && trigger == PoseTrigger.HELD
         ownsGesture = trigger != PoseTrigger.INACTIVE
         if (!ownsGesture || targetFence != null) {
             clearCandidate()
             return CustomPoseResult(pose = pose, timestampMs = time)
+        }
+        // Pointing repeats use the legacy cooldown, then collect fresh confirmation evidence.
+        if (timedPointing && lastEventAt != null) {
+            if (time - lastEventAt!! < config.cooldownMs) {
+                clearCandidate()
+                return CustomPoseResult(pose = pose, phase = HandPosePhase.LATCHED, timestampMs = time)
+            }
+            if (latched.remove(pose)) clearCandidate()
         }
         if (candidate != pose) {
             candidate = pose
@@ -73,14 +82,14 @@ class CustomPoseDetector(private val actions: PoseActions, private val config: H
             observations / config.minimumObservations.toDouble())
         if (observations >= config.minimumObservations && time - candidateStart >= config.confirmationDurationMs) confirmed = true
         var event: PoseId? = null
-        if (confirmed && trigger == PoseTrigger.DISCRETE && pose !in latched &&
+        if (confirmed && (trigger == PoseTrigger.DISCRETE || timedPointing) && pose !in latched &&
             (lastEventAt == null || time - lastEventAt!! >= config.cooldownMs)) {
             event = pose
             latched.add(pose)
             lastEventAt = time
         }
         return CustomPoseResult(pose, if (confirmed) HandPosePhase.LATCHED else HandPosePhase.CONFIRMING,
-            progress, event, if (confirmed && trigger == PoseTrigger.HELD) pose else null, time)
+            progress, event, if (confirmed && trigger == PoseTrigger.HELD && !timedPointing) pose else null, time)
     }
 
     fun targetChanged() {

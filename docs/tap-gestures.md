@@ -56,14 +56,16 @@ actions resets only that draft group; Apply saves and pauses active tracking.
 Practice uses saved settings and simulates Back and other actions locally.
 
 Autoscroll while pointing defaults off. While on, the selected scroll action for a
-confirmed pointing pose runs continuously while held. Pointing actions remain
-editable; changes apply after Apply. Tap, Back, NONE and explicit held actions keep
-their behavior. Releasing the pose stops future segments. The two-finger and
+confirmed pointing pose repeats full swipes. Each repeat waits for the saved rearm
+delay, then fresh confirmation (default 450 ms plus 180 ms and three observations). Pointing actions remain
+editable; changes apply after Apply. Tap, Back and NONE keep
+their behavior. Explicit pointing held bindings use the same timed full-swipe repeat,
+even with the toggle off. Releasing the pose stops future swipes. The two-finger and
 common-pose mappings remain independent. Turning it off restores selected one-shot
 scrolling. Old up/index bindings merge using the previously active profile; an old
 unassigned two-finger binding adopts continuous next without resetting other settings.
 
-Continuous pose uses one 100 ms swipe at a time with a provisional 300 px/s
+Non-pointing continuous pose uses one 100 ms swipe at a time with a provisional 300 px/s
 velocity. Busy samples are dropped, with no backlog. Invalid or stale pose, target
 change, lifecycle or safety guards stop new submissions; a submitted segment may
 still finish. This speed and touch-slop behavior need real-device calibration.

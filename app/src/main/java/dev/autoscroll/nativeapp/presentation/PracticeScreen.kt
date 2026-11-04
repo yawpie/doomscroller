@@ -110,7 +110,7 @@ internal fun PracticeScreen(state: PracticeState, settings: NativeSettings, came
                     Text("Try a gesture", style = MaterialTheme.typography.titleMedium)
                     if (settings.poseActions.enabled && (settings.mode == GestureMode.POSE || settings.mode == GestureMode.HYBRID)) {
                         Text("Pointing directions and finger combinations work together. Point up and index finger up are one pose. One-shot actions run once per appearance; continuous actions stop when the pose is released.")
-                        Text("Raise index and middle together for their own action, continuous next by default. Autoscroll while pointing is ${if (settings.poseActions.autoscrollPointing) "on: chosen pointing scroll actions run while held" else "off: saved pointing actions apply"}.")
+                        Text("Raise index and middle together for their own action, continuous next by default. Autoscroll while pointing is ${if (settings.poseActions.autoscrollPointing) "on: pointing scrolls repeat after rearm delay and fresh confirmation" else "off: saved pointing actions apply"}.")
                         if (settings.mode == GestureMode.HYBRID) Text("A pose with no action does not block flick or movement controls.")
                     } else if (settings.mode == GestureMode.POSE || settings.mode == GestureMode.HYBRID) {
                         Text("Point down for ${if (settings.inverted) "previous" else "next"}; point up for ${if (settings.inverted) "next" else "previous"}. Holding a pointing pose or thumbs-up can repeat after the saved rearm delay plus fresh confirmation.")
@@ -197,7 +197,7 @@ private fun PracticeLiveFeedback(state: PracticeState, settings: NativeSettings,
                 style = MaterialTheme.typography.bodyMedium)
             if (settings.poseActions.enabled && (settings.mode == GestureMode.POSE || settings.mode == GestureMode.HYBRID)) {
                 Text("Pose: ${state.sample.customPose?.let(::poseIdLabel) ?: "Not recognized"}")
-                Text("Selected action: ${poseActionLabel(state.sample.selectedAction)}")
+                Text("Selected action: ${poseActionLabel(state.sample.selectedAction, state.sample.customPose?.isPointing == true)}")
                 Text(state.sample.inactiveReason ?: when (state.sample.customPhase) {
                     HandPosePhase.CONFIRMING -> "Hold steady · confirming"
                     HandPosePhase.LATCHED -> "Pose confirmed"

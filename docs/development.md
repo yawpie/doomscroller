@@ -101,7 +101,7 @@ the physical camera, real-app and performance acceptance still outstanding.
 Keep canonical pose ownership, immutable bindings and trigger policy in `:gesture`, and
 use `PoseActionResolver` for Practice and the external Scroll coordinator. Exercise
 custom-off parity, merged up/index identity, simultaneous finger/pointing recognition,
-two-finger-up continuous scrolling, the four-direction autoscroll toggle, preference
+two-finger-up continuous scrolling, the four-direction timed full-swipe autoscroll toggle (including explicit pointing held bindings), preference
 migration/corruption/future versions, final direction and HYBRID NONE. Back and held segments
 share target generation, freshness and dispatch guards. Do not infer a successful
 navigation from Back ACCEPTED or a swipe callback. Preserve failures and distinguish

@@ -21,24 +21,26 @@ internal fun poseIdLabel(pose: PoseId) = when (pose) {
     PoseId.INDEX_MIDDLE -> "Index and middle up"; PoseId.OPEN_HAND -> "Open hand"
     PoseId.CLOSED_HAND -> "Closed hand"; PoseId.THUMBS_UP -> "Thumbs-up"
 }
-internal fun poseActionLabel(action: PoseAction) = when (action) {
+internal fun poseActionLabel(action: PoseAction, timedPointing: Boolean = false) = when (action) {
     PoseAction.NONE -> "No action"; PoseAction.NEXT_ITEM -> "Scroll next once"
     PoseAction.PREVIOUS_ITEM -> "Scroll previous once"; PoseAction.SINGLE_TAP -> "Single tap"
     PoseAction.SCROLL_LEFT -> "Scroll left once"; PoseAction.SCROLL_RIGHT -> "Scroll right once"
     PoseAction.DOUBLE_TAP -> "Double tap"; PoseAction.BACK -> "Back"
-    PoseAction.CONTINUOUS_NEXT -> "Scroll next while held"; PoseAction.CONTINUOUS_PREVIOUS -> "Scroll previous while held"
-    PoseAction.CONTINUOUS_LEFT -> "Scroll left while held"; PoseAction.CONTINUOUS_RIGHT -> "Scroll right while held"
+    PoseAction.CONTINUOUS_NEXT -> if (timedPointing) "Scroll next repeatedly" else "Scroll next while held"
+    PoseAction.CONTINUOUS_PREVIOUS -> if (timedPointing) "Scroll previous repeatedly" else "Scroll previous while held"
+    PoseAction.CONTINUOUS_LEFT -> if (timedPointing) "Scroll left repeatedly" else "Scroll left while held"
+    PoseAction.CONTINUOUS_RIGHT -> if (timedPointing) "Scroll right repeatedly" else "Scroll right while held"
 }
-private fun actionDescription(action: PoseAction, autoscroll: Boolean) = when (action) {
+private fun actionDescription(action: PoseAction, autoscroll: Boolean, pointing: Boolean) = when (action) {
     PoseAction.NONE -> "No pose action. In Hybrid, flick and movement can still work."
-    PoseAction.NEXT_ITEM, PoseAction.PREVIOUS_ITEM -> if (autoscroll) "Scroll vertically while this pointing pose is held." else "One vertical swipe per appearance."
-    PoseAction.SCROLL_LEFT -> if (autoscroll) "Scroll left while this pointing pose is held." else "View content to the left with one rightward swipe per appearance."
-    PoseAction.SCROLL_RIGHT -> if (autoscroll) "Scroll right while this pointing pose is held." else "View content to the right with one leftward swipe per appearance."
+    PoseAction.NEXT_ITEM, PoseAction.PREVIOUS_ITEM -> if (autoscroll) "Repeat full vertical swipes after the rearm delay and fresh confirmation." else "One vertical swipe per appearance."
+    PoseAction.SCROLL_LEFT -> if (autoscroll) "Repeat full left scrolls after the rearm delay and fresh confirmation." else "View content to the left with one rightward swipe per appearance."
+    PoseAction.SCROLL_RIGHT -> if (autoscroll) "Repeat full right scrolls after the rearm delay and fresh confirmation." else "View content to the right with one leftward swipe per appearance."
     PoseAction.SINGLE_TAP -> "One tap at the center of the content."
     PoseAction.DOUBLE_TAP -> "Two taps at the center; the target decides the result."
     PoseAction.BACK -> "Return to the previous screen, not the previous feed item."
     PoseAction.CONTINUOUS_NEXT, PoseAction.CONTINUOUS_PREVIOUS,
-    PoseAction.CONTINUOUS_LEFT, PoseAction.CONTINUOUS_RIGHT -> "Scroll while the confirmed pose remains visible."
+    PoseAction.CONTINUOUS_LEFT, PoseAction.CONTINUOUS_RIGHT -> if (pointing) "Repeat full swipes after the rearm delay and fresh confirmation." else "Scroll while the confirmed pose remains visible."
 }
 internal fun poseActionsInactiveReason(settings: NativeSettings): String? = when {
     !settings.poseActions.enabled -> "Custom pose actions are off."
@@ -66,7 +68,7 @@ internal fun PoseActionsPanel(value: NativeSettings, update: (NativeSettings) ->
             Text("Autoscroll while pointing", modifier = Modifier.weight(1f))
             Switch(actions.autoscrollPointing, onCheckedChange = null)
         }
-        Text("When on, chosen pointing scroll actions run continuously while held; release to stop. You can still edit every pointing action. Tap, Back and No action keep their selected behavior.")
+        Text("When on, chosen pointing scroll actions repeat full swipes after the rearm delay and fresh confirmation; release to stop. You can still edit every pointing action. Tap, Back and No action keep their selected behavior.")
         listOf("Pointing directions" to PoseId.entries.filter { it.isPointing },
             "Finger combinations" to listOf(PoseId.MIDDLE_ONLY, PoseId.INDEX_MIDDLE),
             "Common poses" to listOf(PoseId.OPEN_HAND, PoseId.CLOSED_HAND, PoseId.THUMBS_UP)).forEach { (title, poses) ->
@@ -77,7 +79,7 @@ internal fun PoseActionsPanel(value: NativeSettings, update: (NativeSettings) ->
                     OutlinedCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
                 PoseIllustration(pose)
-                Text("${poseIdLabel(pose)}: ${poseActionLabel(actions.actionFor(pose))}")
+                Text("${poseIdLabel(pose)}: ${poseActionLabel(actions.actionFor(pose), pose.isPointing)}")
             }
         }
                 }
@@ -96,7 +98,7 @@ internal fun PoseActionsPanel(value: NativeSettings, update: (NativeSettings) ->
                         onClick = { update(value.copy(poseActions = actions.withBinding(pose, action))); selected = null }).heightIn(min = 48.dp),
                         verticalAlignment = Alignment.CenterVertically) {
                         RadioButton(actions.bindings[pose] == action, onClick = null)
-                        Column { Text(poseActionLabel(action)); Text(actionDescription(action, actions.autoscrollPointing && pose.isPointing), style = MaterialTheme.typography.bodySmall) }
+                        Column { Text(poseActionLabel(action)); Text(actionDescription(action, actions.autoscrollPointing && pose.isPointing, pose.isPointing), style = MaterialTheme.typography.bodySmall) }
                     }
                 }
             }
@@ -114,11 +116,11 @@ internal fun SavedPoseActionsGuide(settings: NativeSettings) {
         OutlinedCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
                 PoseIllustration(pose)
-                Text("${poseIdLabel(pose)}: ${poseActionLabel(actions.actionFor(pose))}")
+                Text("${poseIdLabel(pose)}: ${poseActionLabel(actions.actionFor(pose), pose.isPointing)}")
             }
         }
     }
     Text("No action means this pose sends no action; in Hybrid, flick and movement can still work.")
-    Text("Single actions run once per appearance. Continuous actions stop when the pose is released. Point up and index finger up are one pose; index and middle together must point up. Open hand uses all five fingers; closed hand keeps the thumb close to the fist; thumbs-up extends the thumb with the other fingers curled.")
+    Text("Single actions run once per appearance. Pointing autoscroll repeats full swipes after the rearm delay and fresh confirmation. Non-pointing continuous actions use short strokes. Release stops new swipes. Point up and index finger up are one pose; index and middle together must point up. Open hand uses all five fingers; closed hand keeps the thumb close to the fist; thumbs-up extends the thumb with the other fingers curled.")
     Text("Custom pose scroll follows the selected action; reverse direction still affects flick and hand movement.")
 }

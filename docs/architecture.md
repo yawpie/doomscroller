@@ -125,12 +125,17 @@ dispatch is rejected if no candidate row is clear. These actions share the exist
 freshness, target, session and busy guards and ignore direction reversal. Practice
 updates only its independent bounded horizontal page sample.
 When pointing autoscroll is enabled, each pointing pose's selected one-shot scroll
-action resolves to its held equivalent. Pointing bindings remain editable and
-effective while enabled; taps, Back, NONE and explicit held actions remain unchanged.
-Turning it off restores one-shot scrolling. Practice integrates horizontal held movement using elapsed
-time without moving the vertical sample; it never constructs an external executor.
+action resolves to its held equivalent in the saved action model. CustomPoseDetector
+emits discrete events for pointing held actions: one full swipe after confirmation,
+then the saved cooldown followed by fresh confirmation before every repeat.
+Explicit pointing held bindings use this policy even with the toggle off. The
+coordinator uses the saved swipe distance and duration, not 100ms segments. Pointing bindings remain editable and
+effective while enabled; taps, Back and NONE retain their behavior. Non-pointing
+held actions retain short segments.
+Turning it off restores one-shot scrolling. Practice advances one local page per pointing repeat and integrates non-pointing
+horizontal held movement using elapsed time without moving the vertical sample; it never constructs an external executor.
 
-The coordinator owns one operation and drops busy samples. Held pose scrolling
+The coordinator owns one operation and drops busy samples. Non-pointing held pose scrolling
 uses 100ms segments and a provisional shared 300 px/s speed. A watchdog polled at
 250ms invalidates held output and recognition evidence after the lesser of the
 350ms stale limit and 250ms maximum gap. Target identity and generation are checked

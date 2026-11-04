@@ -229,3 +229,27 @@ ignored `artifacts/pointing-edit-autoscroll/samsung-ui.txt` and
 `artifacts/pointing-edit-autoscroll/samsung-ui-verified.txt`.
 Emulator execution and observed gestures in external apps were not repeated for
 this correction; the earlier combined-pose receipt does not establish those results.
+
+
+## Timed full-swipe pointing autoscroll (4 November 2026)
+
+This update supersedes the pointing short-segment behavior described above;
+earlier device/UI receipts do not validate the new repeat behavior.
+
+All four pointing scroll directions now emit discrete full-swipe events when
+Autoscroll while pointing is on, or when an explicit pointing held binding is
+selected. Each event uses the saved swipe distance and duration. Repeats wait for
+the saved rearm delay, then fresh confirmation duration and minimum observations
+(defaults: 450 ms, 180 ms, three observations). Tracking loss/gaps discard
+confirmation. Target changes still require a valid release before reconfirmation.
+Tap, Back, NONE, one-shot bindings with autoscroll off, and non-pointing held
+segments keep their previous behavior. Preferences and parity goldens are unchanged.
+
+Validation on this checkout:
+- 195 JVM tests passed (88 gesture, 107 app), no failures or skips.
+- Tests cover all four axes with the toggle on and explicit held bindings with it
+  off, full requests at 1200/1900/2600 ms for 100 ms sampling, direction changes,
+  duplicate/gapped samples, target fences, local Practice page steps and busy drops.
+- Lint, debug APK, unsigned release APK and instrumentation APK compilation passed.
+- Instrumentation execution, large-text/theme/rotation UI checks, real camera/feed
+  response and sustained physical-device acceptance have not been rerun.

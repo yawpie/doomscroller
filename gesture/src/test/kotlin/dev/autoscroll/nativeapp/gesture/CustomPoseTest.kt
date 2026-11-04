@@ -192,7 +192,7 @@ class CustomPoseTest {
         val detector = CustomPoseDetector(actions, config)
         fun sample(t: Long, p: PoseId?) = detector.processPose(t, p)
         sample(0, PoseId.POINTING_UP); sample(100, PoseId.POINTING_UP)
-        assertEquals(PoseId.POINTING_UP, sample(200, PoseId.POINTING_UP).held)
+        assertEquals(PoseId.POINTING_UP, sample(200, PoseId.POINTING_UP).event)
         assertNull(sample(300, PoseId.INDEX_MIDDLE).held)
         sample(400, PoseId.INDEX_MIDDLE)
         assertEquals(PoseId.INDEX_MIDDLE, sample(500, PoseId.INDEX_MIDDLE).held)
@@ -262,11 +262,11 @@ class CustomPoseTest {
         detector.targetChanged()
         detector.processPose(400, PoseId.CLOSED_HAND)
         detector.targetChanged()
-        for (t in 500L..1000L step 100) assertNull(detector.processPose(t, PoseId.POINTING_UP).held)
+        for (t in 500L..1000L step 100) assertNull(detector.processPose(t, PoseId.POINTING_UP).event)
         for (t in 1100L..1300L step 100) detector.processPose(t, PoseId.CLOSED_HAND)
         detector.processPose(1400, PoseId.POINTING_UP)
         detector.processPose(1500, PoseId.POINTING_UP)
-        assertEquals(PoseId.POINTING_UP, detector.processPose(1600, PoseId.POINTING_UP).held)
+        assertEquals(PoseId.POINTING_UP, detector.processPose(1600, PoseId.POINTING_UP).event)
     }
 
     @Test fun existingFlickOwnershipCannotBeStolenByPoseCandidate() {
@@ -283,7 +283,7 @@ class CustomPoseTest {
         assertNull(decision.customPose?.event)
     }
 
-    @Test fun twoFingerUpUsesItsOwnHoldAndDefaultPointingScrollsStayHeld() {
+    @Test fun twoFingerUpKeepsHoldWhilePointingRepeatsAfterCooldownAndConfirmation() {
         val detector = CustomPoseDetector(PoseActions(enabled = true), config)
         fun sample(t: Long, open: Set<Int>) = detector.process(HandTrackingResult(t, HandPose(points(open))))
         sample(0, setOf(5)); sample(100, setOf(5))
@@ -296,16 +296,32 @@ class CustomPoseTest {
         for (pose in PoseId.entries.filter { it.isPointing }) {
             val auto = CustomPoseDetector(PoseActions(enabled = true, autoscrollPointing = true), config)
             auto.processPose(0, pose); auto.processPose(100, pose)
-            for (t in 200L..800L step 100) {
+            val events = mutableListOf<Long>()
+            for (t in 200L..1600L step 100) {
                 val result = auto.processPose(t, pose)
-                assertEquals(pose, result.held)
-                assertNull(result.event)
+                assertNull(result.held)
+                if (result.event != null) events += t
             }
-            assertNull(auto.processPose(900, null).held)
+            assertEquals(listOf(200L, 900L, 1600L), events)
+            assertNull(auto.processPose(1700, null).held)
         }
         val diagonal = points(setOf(5, 9), rotation = 0.65)
         assertNull(CustomPoseClassifier(config).classify(diagonal, 1.0))
         assertEquals(PoseId.INDEX_MIDDLE, CustomPoseClassifier(config).classify(diagonal, 1.0, PoseId.INDEX_MIDDLE))
+    }
+
+    @Test fun pointingRepeatRequiresFreshEvidenceAfterLossAndDirectionChange() {
+        val detector = CustomPoseDetector(PoseActions(enabled = true, autoscrollPointing = true), config)
+        for (t in 0L..200L step 100) detector.processPose(t, PoseId.POINTING_UP)
+        detector.processPose(300, null)
+        for (t in 400L..800L step 100) assertNull(detector.processPose(t, PoseId.POINTING_RIGHT).event)
+        assertEquals(PoseId.POINTING_RIGHT, detector.processPose(900, PoseId.POINTING_RIGHT).event)
+        detector.processPose(1000, PoseId.POINTING_RIGHT)
+        assertNull(detector.processPose(1000, PoseId.POINTING_RIGHT).event)
+        // A gap after cooldown starts a new confirmation, never an immediate swipe.
+        assertNull(detector.processPose(1600, PoseId.POINTING_RIGHT).event)
+        assertNull(detector.processPose(1700, PoseId.POINTING_RIGHT).event)
+        assertEquals(PoseId.POINTING_RIGHT, detector.processPose(1800, PoseId.POINTING_RIGHT).event)
     }
 
     @Test fun editedPointingActionChoosesHoldDiscreteOrNoneWhileAutoscrollStaysOn() {
@@ -315,8 +331,8 @@ class CustomPoseTest {
             detector.processPose(0, PoseId.POINTING_UP)
             detector.processPose(100, PoseId.POINTING_UP)
             val confirmed = detector.processPose(200, PoseId.POINTING_UP)
-            assertEquals(if (action == PoseAction.BACK) PoseId.POINTING_UP else null, confirmed.event)
-            assertEquals(if (action == PoseAction.SCROLL_LEFT) PoseId.POINTING_UP else null, confirmed.held)
+            assertEquals(if (action != PoseAction.NONE) PoseId.POINTING_UP else null, confirmed.event)
+            assertNull(confirmed.held)
             assertEquals(action != PoseAction.NONE, detector.ownsGesture)
             assertNull(detector.processPose(300, PoseId.POINTING_UP).event)
         }

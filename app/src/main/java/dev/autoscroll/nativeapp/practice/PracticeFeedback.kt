@@ -134,19 +134,19 @@ internal class PracticeFeedback(private val settings: NativeSettings) {
         val motionSeconds = if (previous == null || result.timestampMs - previous > settings.scroll.staleAfterMs) 0.0
             else (result.timestampMs - previous).coerceAtMost(50) / 1000.0
         val movement = when (discrete) {
-            PoseAction.NEXT_ITEM, PoseAction.PREVIOUS_ITEM -> {
+            PoseAction.NEXT_ITEM, PoseAction.PREVIOUS_ITEM, PoseAction.CONTINUOUS_NEXT, PoseAction.CONTINUOUS_PREVIOUS -> {
                 val distance = if (decision.flick != null && settings.scroll.flickAction == FlickScrollAction.FAST_SCROLL)
                     settings.scroll.flickScrollDistance / SAMPLE_PAGE_SIZE_PX else 1.0
-                distance * if (discrete == PoseAction.NEXT_ITEM) 1 else -1
+                distance * if (discrete == PoseAction.NEXT_ITEM || discrete == PoseAction.CONTINUOUS_NEXT) 1 else -1
             }
             else -> velocity * (if (heldVelocity != 0.0) seconds else motionSeconds) / SAMPLE_PAGE_SIZE_PX
         }
         val activated = held != null && !sameHold
         val action = when (discrete) {
-            PoseAction.NEXT_ITEM -> "Next item"
-            PoseAction.PREVIOUS_ITEM -> "Previous item"
-            PoseAction.SCROLL_LEFT -> "Scroll left"
-            PoseAction.SCROLL_RIGHT -> "Scroll right"
+            PoseAction.NEXT_ITEM, PoseAction.CONTINUOUS_NEXT -> "Next item"
+            PoseAction.PREVIOUS_ITEM, PoseAction.CONTINUOUS_PREVIOUS -> "Previous item"
+            PoseAction.SCROLL_LEFT, PoseAction.CONTINUOUS_LEFT -> "Scroll left"
+            PoseAction.SCROLL_RIGHT, PoseAction.CONTINUOUS_RIGHT -> "Scroll right"
             PoseAction.SINGLE_TAP -> "Tap video"
             PoseAction.DOUBLE_TAP -> "Double tap"
             PoseAction.BACK -> if (state.localDetailOpen) "Back to sample list" else "Already at sample root"
@@ -156,8 +156,8 @@ internal class PracticeFeedback(private val settings: NativeSettings) {
         }
         state = state.copy(position = (state.position + movement).coerceIn(0.0, 4.0),
             horizontalPosition = (state.horizontalPosition + when (discrete) {
-                PoseAction.SCROLL_LEFT -> -1.0
-                PoseAction.SCROLL_RIGHT -> 1.0
+                PoseAction.SCROLL_LEFT, PoseAction.CONTINUOUS_LEFT -> -1.0
+                PoseAction.SCROLL_RIGHT, PoseAction.CONTINUOUS_RIGHT -> 1.0
                 else -> horizontalVelocity * seconds / SAMPLE_PAGE_SIZE_PX
             }).coerceIn(0.0, 4.0),
             videoPlaying = if (discrete == PoseAction.SINGLE_TAP) !state.videoPlaying else state.videoPlaying,

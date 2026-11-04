@@ -57,8 +57,9 @@ while a pose is held. NONE sends no pose action; HYBRID may still use flick/move
 Custom mappings work in Scroll with POSE/HYBRID, not Pointer, FLICK or CONTINUOUS.
 With **Autoscroll while pointing** off (default), Point left/right defaults to
 **Scroll left once** / **Scroll right once**. Turn the toggle on and Apply to scroll
-continuously using each pointing pose's chosen scroll action while held;
-release or lose the hand to stop new segments. Pointing actions remain editable
+by repeating full swipes using each pointing pose's chosen scroll direction.
+Each repeat waits for the saved rearm delay, then fresh confirmation (defaults:
+450 ms plus 180 ms and at least three observations). Release or lose the hand to stop new swipes. Pointing actions remain editable
 with the toggle on, and edits apply after Apply. Tap, Back and No action retain
 their behavior. Turning the toggle off restores the selected one-shot scroll actions. Two-finger and
 common-pose bindings remain independent. Discrete custom actions send one swipe
@@ -66,7 +67,8 @@ per confirmed appearance; release the pose before repeating.
 Left/right describes content navigation: left swipes the finger right, and right
 swipes the finger left. Distance uses the saved screen-distance fraction of the
 content width, and duration uses the saved swipe duration for discrete actions.
-Held actions use bounded 100ms segments at the existing provisional 300px/s.
+Explicit pointing held bindings also repeat full swipes, even with the toggle off.
+Non-pointing held actions use bounded 100ms segments at the existing provisional 300px/s.
 Practice shows a separate
 five-page horizontal sample; external apps decide whether the swipe scrolls or
 performs another action.

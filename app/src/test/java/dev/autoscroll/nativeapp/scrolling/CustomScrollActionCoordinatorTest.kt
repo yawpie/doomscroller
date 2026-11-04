@@ -39,13 +39,13 @@ class CustomScrollActionCoordinatorTest {
             coordinator.configure(inverted = true, settings = NativeSettings(mode = GestureMode.POSE,
                 poseActions = PoseActions(enabled = true, autoscrollPointing = true)))
             coordinator.setSessionActive(true)
-            coordinator.process(decision(now, held = true, pose = pose), now, "target.app", 8)
+            coordinator.process(decision(now, event = true, pose = pose), now, "target.app", 8)
             runCurrent()
-            assertEquals(ScrollRequest(action, 30.0, 100, "target.app", 8), executor.requests.single())
+            assertEquals(ScrollRequest(action, expectedTargetPackage = "target.app", expectedTargetGeneration = 8), executor.requests.single())
             now += 500
-            coordinator.process(decision(now - 400, held = true, pose = pose), now - 400)
+            coordinator.process(decision(now - 400, event = true, pose = pose), now - 400)
             runCurrent()
-            coordinator.process(decision(now, held = true, pose = pose), now)
+            coordinator.process(decision(now, event = true, pose = pose), now)
             coordinator.setSessionActive(false)
             runCurrent()
             assertEquals(1, executor.requests.size)

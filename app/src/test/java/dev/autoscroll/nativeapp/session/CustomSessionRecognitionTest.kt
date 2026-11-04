@@ -14,7 +14,7 @@ import org.junit.Test
 class CustomSessionRecognitionTest {
     private val bounds = SwipeBounds(0, 0, 1080, 1920)
 
-    private fun sample(time: Long, pointing: Boolean): HandTrackingResult {
+    private fun sample(time: Long, pointing: Boolean, rotation: Double = 0.0): HandTrackingResult {
         val points = MutableList(21) { 0.0 to 0.0 }
         points[0] = 0.0 to 0.12; points[1] = -0.11 to 0.09; points[2] = -0.11 to 0.03
         points[3] = -0.04 to 0.03; points[4] = 0.02 to 0.03
@@ -25,7 +25,8 @@ class CustomSessionRecognitionTest {
             points[mcp + 2] = if (extended) x to y - 0.16 else x + 0.05 to y - 0.085
             points[mcp + 3] = if (extended) x to y - 0.22 else x + 0.05 to y - 0.035
         }
-        return HandTrackingResult(time, HandPose(points.mapIndexed { i, (x, y) -> HandLandmark(i, .5 + x, .5 + y, 0.0) }))
+        return HandTrackingResult(time, HandPose(points.mapIndexed { i, (x, y) -> HandLandmark(i, .5 + x * kotlin.math.cos(rotation) - y * kotlin.math.sin(rotation),
+            .5 + x * kotlin.math.sin(rotation) + y * kotlin.math.cos(rotation), 0.0) }))
     }
 
     @Test fun savedMappingAndTargetChangeRequireReleaseAndFreshConfirmation() {
@@ -88,7 +89,59 @@ class CustomSessionRecognitionTest {
         assertTrue(requests.all { it.action == ScrollAction.BACK })
     }
 
-    @Test fun heldScrollDropsBusySamplesAndStopsOnLossAndInvalidation() = runTest {
+    @Test fun pointingAutoscrollRepeatsFullSwipesWithLegacyTimingOnEveryAxis() = runTest {
+        for ((rotation, action) in listOf(0.0 to ScrollAction.BACKWARD, kotlin.math.PI to ScrollAction.FORWARD,
+            -kotlin.math.PI / 2 to ScrollAction.LEFT, kotlin.math.PI / 2 to ScrollAction.RIGHT)) {
+            for (toggle in listOf(false, true)) {
+                val pose = when (action) {
+                    ScrollAction.BACKWARD -> PoseId.POINTING_UP
+                    ScrollAction.FORWARD -> PoseId.POINTING_DOWN
+                    ScrollAction.LEFT -> PoseId.POINTING_LEFT
+                    else -> PoseId.POINTING_RIGHT
+                }
+                val binding = when (action) {
+                    ScrollAction.BACKWARD -> PoseAction.CONTINUOUS_PREVIOUS
+                    ScrollAction.FORWARD -> PoseAction.CONTINUOUS_NEXT
+                    ScrollAction.LEFT -> PoseAction.CONTINUOUS_LEFT
+                    else -> PoseAction.CONTINUOUS_RIGHT
+                }
+                val actions = PoseActions(enabled = true, autoscrollPointing = toggle)
+                val settings = NativeSettings(mode = GestureMode.POSE, inverted = true,
+                    poseActions = if (toggle) actions else actions.withBinding(pose, binding))
+                val requests = mutableListOf<Pair<Long, ScrollRequest>>()
+                var now = 1000L
+                val executor = object : ScrollExecutor {
+                    override val isReady = true
+                    override suspend fun execute(request: ScrollRequest): ScrollExecutionResult {
+                        requests += now to request
+                        return ScrollExecutionResult.COMPLETED
+                    }
+                }
+                val session = SessionRecognition(settings, null, bounds)
+                val coordinator = ScrollActionCoordinator(executor, this, { now })
+                coordinator.configure(settings = settings); coordinator.setSessionActive(true)
+                for (t in 1000L..2600L step 100) {
+                    now = t
+                    val decision = session.process(sample(t, true, rotation), t, bounds, true).scroll!!
+                    assertNull(decision.customPose!!.held)
+                    coordinator.process(decision, t, "target.app", 1)
+                    runCurrent()
+                }
+                assertEquals(listOf(1200L, 1900L, 2600L), requests.map { it.first })
+                assertTrue(requests.all { it.second == ScrollRequest(action,
+                    expectedTargetPackage = "target.app", expectedTargetGeneration = 1) })
+                session.targetChanged(); coordinator.invalidate()
+                for (t in 2700L..3600L step 100) {
+                    now = t
+                    coordinator.process(session.process(sample(t, true, rotation), t, bounds, true).scroll!!, t)
+                    runCurrent()
+                }
+                assertEquals(3, requests.size)
+            }
+        }
+    }
+
+    @Test fun repeatedPointingDropsBusyEventsAndStopsOnLossAndInvalidation() = runTest {
         val settings = NativeSettings(mode = GestureMode.POSE,
             poseActions = PoseActions(enabled = true).withBinding(PoseId.POINTING_UP, PoseAction.CONTINUOUS_NEXT))
         val requests = mutableListOf<ScrollRequest>()
@@ -108,9 +161,9 @@ class CustomSessionRecognitionTest {
             now = frame.timestampMs
             coordinator.process(session.process(frame, now, bounds, true).scroll!!, now, "target.app", 1)
         }
-        for (t in 1000L..1500L step 100) { process(sample(t, true)); runCurrent() }
+        for (t in 1000L..2100L step 100) { process(sample(t, true)); runCurrent() }
         assertEquals(1, requests.size)
-        process(HandTrackingResult(1600)); runCurrent()
+        process(HandTrackingResult(2200)); runCurrent()
         assertEquals(0.0, coordinator.state.value.continuousPixelsPerSecond, 0.0)
         session.targetChanged(); coordinator.invalidate(); runCurrent()
         pending.complete(ScrollExecutionResult.COMPLETED); runCurrent()

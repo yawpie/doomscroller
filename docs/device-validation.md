@@ -53,7 +53,7 @@ Back ACCEPTED and swipe completion alone do not prove navigation.
 | Trial | Evidence to collect |
 | --- | --- |
 | Pose accuracy | 20 appearances per canonical pose and hand; record confusion matrix, false triggers, lighting, distance and latency. Proposed target: at least 18/20 correct. |
-| Pointing autoscroll | Toggle off/on; edit a pointing action while enabled and verify the chosen axis, no inversion, hand-release/loss stop and restored one-shot scrolling after switching off. Test Tap, Back and NONE overrides and two-finger-up continuous scrolling independently. |
+| Pointing autoscroll | Toggle off/on; edit a pointing action while enabled and verify full swipes on all four chosen axes, saved distance/duration, cooldown followed by fresh confirmation before every repeat, no inversion, hand-release/loss stop and restored one-shot scrolling after switching off. Also test explicit pointing held bindings with the toggle off. Test Tap, Back and NONE overrides and two-finger-up continuous scrolling independently. |
 | Transitions | 20 changes per confusable pair, including each single finger ↔ both; test confirmation and that held output stops before a new pose triggers. |
 | Hold/release | Hold discrete and continuous poses for 10 seconds, test loss/reacquisition, and measure last submission and remaining 100ms segment after release. Confirm discrete Back fires at most once per appearance. |
 | Safety/lifecycle | Test target switches including A→B→A, lock, overlay interaction, stale callbacks, Pause/Stop and permissions; no new action after invalidation and no backlog. |

@@ -60,21 +60,21 @@ class CustomPracticeFeedbackTest {
     }
 
     @Test fun heldMotionStopsOnStaleAndGapAndRequiresFreshConfirmation() {
-        val f = feedback(PoseAction.CONTINUOUS_NEXT, inverted = true)
-        for (t in 0L..500L step 100) f.process(sample(t, setOf(5)))
+        val f = feedback(PoseAction.NONE, both = PoseAction.CONTINUOUS_NEXT, inverted = true)
+        for (t in 0L..500L step 100) f.process(sample(t, setOf(5, 9)))
         assertEquals(1, f.state.holdActivations)
         assertEquals(0, f.state.actionCount)
         assertTrue(f.state.position > 2.0)
         val before = f.state.position
-        f.process(sample(600, setOf(5)), nowMs = 1000)
+        f.process(sample(600, setOf(5, 9)), nowMs = 1000)
         assertEquals(before, f.state.position, 0.0)
         assertEquals(0.0, f.state.velocity, 0.0)
-        for (t in 1100L..1200L step 100) f.process(sample(t, setOf(5)))
+        for (t in 1100L..1200L step 100) f.process(sample(t, setOf(5, 9)))
         assertEquals(before, f.state.position, 0.0)
-        f.process(sample(1300, setOf(5)))
+        f.process(sample(1300, setOf(5, 9)))
         assertEquals(2, f.state.holdActivations)
         assertEquals(before, f.state.position, 0.0)
-        f.process(sample(1700, setOf(5)))
+        f.process(sample(1700, setOf(5, 9)))
         assertEquals(before, f.state.position, 0.0)
         assertEquals(0.0, f.state.velocity, 0.0)
     }
@@ -100,22 +100,22 @@ class CustomPracticeFeedbackTest {
     }
 
     @Test fun heldDistanceUsesElapsedTimeAtDifferentSampleRates() {
-        val fast = feedback(PoseAction.CONTINUOUS_NEXT)
-        val slow = feedback(PoseAction.CONTINUOUS_NEXT)
-        for (t in 0L..1000L step 50) fast.process(sample(t, setOf(5)))
-        for (t in 0L..1000L step 100) slow.process(sample(t, setOf(5)))
+        val fast = feedback(PoseAction.NONE, both = PoseAction.CONTINUOUS_NEXT)
+        val slow = feedback(PoseAction.NONE, both = PoseAction.CONTINUOUS_NEXT)
+        for (t in 0L..1000L step 50) fast.process(sample(t, setOf(5, 9)))
+        for (t in 0L..1000L step 100) slow.process(sample(t, setOf(5, 9)))
         assertEquals(fast.state.position, slow.state.position, 0.000001)
         assertEquals(1, fast.state.holdActivations)
         assertEquals(1, slow.state.holdActivations)
     }
 
     @Test fun duplicateSampleStopsHoldWithoutRearmingDiscreteAction() {
-        val held = feedback(PoseAction.CONTINUOUS_NEXT)
-        for (t in 0L..400L step 100) held.process(sample(t, setOf(5)))
+        val held = feedback(PoseAction.NONE, both = PoseAction.CONTINUOUS_NEXT)
+        for (t in 0L..400L step 100) held.process(sample(t, setOf(5, 9)))
         val before = held.state.position
-        held.process(sample(400, setOf(5)))
+        held.process(sample(400, setOf(5, 9)))
         assertEquals(0.0, held.state.velocity, 0.0)
-        held.process(sample(500, setOf(5)))
+        held.process(sample(500, setOf(5, 9)))
         assertEquals(before, held.state.position, 0.0)
         val discrete = feedback(PoseAction.BACK)
         for (t in 0L..400L step 100) discrete.process(sample(t, setOf(5)))
@@ -131,10 +131,10 @@ class CustomPracticeFeedbackTest {
             val f = PracticeFeedback(NativeSettings(mode = GestureMode.POSE, inverted = true,
                 poseActions = PoseActions(enabled = true, autoscrollPointing = true)))
             for (t in 0L..1000L step 100) f.process(sample(t, setOf(5), rotation))
-            assertEquals(2.0 + if (horizontal) 0.0 else direction * 0.4, f.state.position, 0.000001)
-            assertEquals(2.0 + if (horizontal) direction * 0.4 else 0.0, f.state.horizontalPosition, 0.000001)
-            assertEquals(1, f.state.holdActivations)
-            assertEquals(0, f.state.actionCount)
+            assertEquals(2.0 + if (horizontal) 0.0 else direction * 2.0, f.state.position, 0.000001)
+            assertEquals(2.0 + if (horizontal) direction * 2.0 else 0.0, f.state.horizontalPosition, 0.000001)
+            assertEquals(0, f.state.holdActivations)
+            assertEquals(2, f.state.actionCount)
             val before = f.state
             f.process(HandTrackingResult(1100))
             assertEquals(before.position, f.state.position, 0.0)
